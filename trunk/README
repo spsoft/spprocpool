@@ -1,0 +1,31 @@
+			 spprocpool README
+
+1.Introduction
+
+spprocpool is a Unix/Linux process pool library written in C++.
+
+The spprocpool code was developed under Linux, but has also been tested under Solaris.
+
+You can get the code from the spprocpool home page:
+
+	http://code.google.com/p/spprocpool/
+
+2.Building
+
+To build libspprocpool.so, type
+
+$ make
+
+This will build all the targets include examples. You can run the
+example programs:
+
+$ testprocpool
+$ testprocdatum
+
+
+Reports of successful use of spxml are appreciated.
+
+Enjoy!
+
+							-- stephen liu
+
