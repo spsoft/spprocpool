@@ -15,6 +15,12 @@ ifeq ($(origin version), undefined)
 	version = 0.1
 endif
 
+OS=$(shell uname)
+
+ifeq ($(OS), SunOS)
+	LDFLAGS += -lnsl -lsocket
+endif
+
 #--------------------------------------------------------------------
 
 LIBOBJS = spprocpdu.o spprocmanager.o spprocpool.o spprocdatum.o

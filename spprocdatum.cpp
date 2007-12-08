@@ -364,3 +364,8 @@ pid_t SP_ProcDatumDispatcher :: dispatch( const void * request, size_t len )
 	return ret;
 }
 
+void SP_ProcDatumDispatcher :: dump() const
+{
+	mPool->dump();
+}
+
