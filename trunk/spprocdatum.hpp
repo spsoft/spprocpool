@@ -32,6 +32,8 @@ public:
 
 	pid_t dispatch( const void * request, size_t len );
 
+	void dump() const;
+
 private:
 	// manager side
 	SP_ProcManager * mManager;

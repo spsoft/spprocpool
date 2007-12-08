@@ -68,6 +68,12 @@ int main( int argc, char * argv[] )
 		printf( "dispatch to worker #%d\n", pid );
 	}
 
+	printf( "wait 5 seconds for all processes to complete\n" );
+
+	sleep( 5 );
+
+	dispatcher.dump();
+
 	closelog();
 
 	return 0;

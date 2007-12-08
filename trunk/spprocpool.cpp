@@ -147,7 +147,7 @@ SP_ProcInfo * SP_ProcInfoList :: takeItem( int index )
 	return ret;
 }
 
-int SP_ProcInfoList :: findByPid( int pid ) const
+int SP_ProcInfoList :: findByPid( pid_t pid ) const
 {
 	for( int i = 0; i < mCount; i++ ) {
 		if( mList[i]->getPid() == pid ) return i;
@@ -206,7 +206,9 @@ SP_ProcPool :: ~SP_ProcPool()
 
 void SP_ProcPool :: dump() const
 {
+	pthread_mutex_lock( const_cast<pthread_mutex_t*>(&mMutex) );
 	mList->dump();
+	pthread_mutex_unlock( const_cast<pthread_mutex_t*>(&mMutex));
 }
 
 void SP_ProcPool :: setMaxRequestsPerProc( int maxRequestsPerProc )
