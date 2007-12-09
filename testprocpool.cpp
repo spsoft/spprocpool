@@ -45,7 +45,7 @@ public:
 
 //-------------------------------------------------------------------
 
-void * echoClient( void * args )
+void * echoWorkerCaller( void * args )
 {
 	const char * text = "Hello, world!";
 
@@ -84,7 +84,7 @@ int main( int argc, char * argv[] )
 	pthread_t threadArray[ MAX_TEST_THREAD ];
 
 	for( int i = 0; i < MAX_TEST_THREAD; i++ ) {
-		pthread_create( &( threadArray[i] ), NULL, echoClient, procPool );
+		pthread_create( &( threadArray[i] ), NULL, echoWorkerCaller, procPool );
 	}
 
 	for( int i = 0; i < MAX_TEST_THREAD; i++ ) {

@@ -30,6 +30,10 @@ public:
 			SP_ProcDatumHandler * handler );
 	~SP_ProcDatumDispatcher();
 
+	void setMaxRequestsPerProc( int maxRequestsPerProc );
+
+	void setMaxIdleTimeout( int maxIdleTimeout );
+
 	pid_t dispatch( const void * request, size_t len );
 
 	void dump() const;

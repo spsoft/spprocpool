@@ -58,19 +58,24 @@ int main( int argc, char * argv[] )
 	openlog( "testprocdatum", LOG_CONS | LOG_PID, LOG_USER );
 #endif
 
-	const char * text = "Hello, world!";
-
 	SP_ProcDatumDispatcher dispatcher( new SP_ProcEchoServiceFactory(),
 			new SP_ProcEchoHandler() );
 
+	dispatcher.setMaxIdleTimeout( 5 );
+	dispatcher.setMaxRequestsPerProc( 2 );
+
+	char buff[ 256 ] = { 0 };
 	for( int i = 0; i < 10; i++ ) {
-		pid_t pid = dispatcher.dispatch( text, strlen( text ) );
-		printf( "dispatch to worker #%d\n", pid );
+		snprintf( buff, sizeof( buff ), "Index %d, Hello world!", i );
+		pid_t pid = dispatcher.dispatch( buff, strlen( buff ) );
+		printf( "dispatch %d to worker #%d\n", i, pid );
+
+		if( 0 == ( i % 3 ) ) sleep( 1 );
 	}
 
 	printf( "wait 5 seconds for all processes to complete\n" );
 
-	sleep( 5 );
+	sleep( 10 );
 
 	dispatcher.dump();
 

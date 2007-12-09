@@ -271,6 +271,16 @@ SP_ProcDatumDispatcher :: ~SP_ProcDatumDispatcher()
 	mBusyList = NULL;
 }
 
+void SP_ProcDatumDispatcher :: setMaxRequestsPerProc( int maxRequestsPerProc )
+{
+	mPool->setMaxRequestsPerProc( maxRequestsPerProc );
+}
+
+void SP_ProcDatumDispatcher :: setMaxIdleTimeout( int maxIdleTimeout )
+{
+	mPool->setMaxIdleTimeout( maxIdleTimeout );
+}
+
 void * SP_ProcDatumDispatcher :: checkReply( void * args )
 {
 	SP_ProcDatumDispatcher * dispatcher = (SP_ProcDatumDispatcher*)args;
@@ -315,16 +325,13 @@ void * SP_ProcDatumDispatcher :: checkReply( void * args )
 						if( SP_ProcPduUtils::read_pdu( pfd[i].fd, &pdu, &reply ) > 0 ) {
 							handler->onReply( info->getPid(), &reply );
 							pool->save( info );
-							syslog( LOG_INFO, "INFO: save pid #%d, fd %d", info->getPid(), pfd[i].fd );
 						} else {
 							pool->erase( info );
-							syslog( LOG_INFO, "INFO: erase pid #%d, fd %d", info->getPid(), pfd[i].fd );
 						}
 					} else {
 						// error
 						handler->onError( info->getPid() );
 						pool->erase( info );
-						syslog( LOG_INFO, "INFO: erase pid #%d, fd %d", info->getPid(), pfd[i].fd );
 					}
 				}
 			}
