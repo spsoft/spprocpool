@@ -276,6 +276,8 @@ SP_ProcInfo * SP_ProcPool :: get()
 void SP_ProcPool :: save( SP_ProcInfo * procInfo )
 {
 	if( mMaxRequestsPerProc > 0 && procInfo->getRequests() >= mMaxRequestsPerProc ) {
+		syslog( LOG_NOTICE, "NOTICE: process #%d serve %d requests, remove",
+				procInfo->getPid(), procInfo->getRequests() );
 		delete procInfo;
 	} else {
 		pthread_mutex_lock( &mMutex );
@@ -284,11 +286,15 @@ void SP_ProcPool :: save( SP_ProcInfo * procInfo )
 		mList->append( procInfo );
 
 		pthread_mutex_unlock( &mMutex );
+		syslog( LOG_INFO, "INFO: save pid #%d, fd %d",
+				procInfo->getPid(), procInfo->getPipeFd() );
 	}
 }
 
 void SP_ProcPool :: erase( SP_ProcInfo * procInfo )
 {
+	syslog( LOG_INFO, "INFO: erase pid #%d, fd %d",
+			procInfo->getPid(), procInfo->getPipeFd() );
 	delete procInfo;
 }
 
