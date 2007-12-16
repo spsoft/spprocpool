@@ -235,6 +235,8 @@ SP_ProcDatumDispatcher :: SP_ProcDatumDispatcher( SP_ProcDatumServiceFactory * f
 
 	mBusyList = new SP_ProcInfoListEx();
 
+	mMaxProc = 128;
+
 	pthread_mutex_init( &mMutex, NULL );
 	pthread_cond_init( &mCond, NULL );
 
@@ -271,14 +273,14 @@ SP_ProcDatumDispatcher :: ~SP_ProcDatumDispatcher()
 	mBusyList = NULL;
 }
 
-void SP_ProcDatumDispatcher :: setMaxRequestsPerProc( int maxRequestsPerProc )
+SP_ProcPool * SP_ProcDatumDispatcher :: getProcPool()
 {
-	mPool->setMaxRequestsPerProc( maxRequestsPerProc );
+	return mPool;
 }
 
-void SP_ProcDatumDispatcher :: setMaxIdleTimeout( int maxIdleTimeout )
+void SP_ProcDatumDispatcher :: setMaxProc( int maxProc )
 {
-	mPool->setMaxIdleTimeout( maxIdleTimeout );
+	mMaxProc = maxProc;
 }
 
 void * SP_ProcDatumDispatcher :: checkReply( void * args )
@@ -349,6 +351,8 @@ void * SP_ProcDatumDispatcher :: checkReply( void * args )
 
 pid_t SP_ProcDatumDispatcher :: dispatch( const void * request, size_t len )
 {
+	if( mBusyList->getCount() >= mMaxProc ) return -1;
+
 	pid_t ret = -1;
 
 	SP_ProcInfo * info = mPool->get();

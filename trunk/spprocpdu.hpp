@@ -43,6 +43,11 @@ public:
 	// > 0 : OK, -1 : error
 	static int send_pdu( int fd, const SP_ProcPdu_t * pdu, const void * data );
 
+	// >= 0 : OK, -1 : error
+	static int tcp_listen( const char * ip, int port, int * fd );
+
+	static void print_cpu_time();
+
 	/*
 	 * The following functions are adapted from APUE (by W. Richard Stevens).
 	 */

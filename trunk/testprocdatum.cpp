@@ -11,6 +11,7 @@
 
 #include "spprocdatum.hpp"
 #include "spprocpdu.hpp"
+#include "spprocpool.hpp"
 
 class SP_ProcEchoService : public SP_ProcDatumService {
 public:
@@ -61,8 +62,7 @@ int main( int argc, char * argv[] )
 	SP_ProcDatumDispatcher dispatcher( new SP_ProcEchoServiceFactory(),
 			new SP_ProcEchoHandler() );
 
-	dispatcher.setMaxIdleTimeout( 5 );
-	dispatcher.setMaxRequestsPerProc( 2 );
+	dispatcher.getProcPool()->setMaxRequestsPerProc( 2 );
 
 	char buff[ 256 ] = { 0 };
 	for( int i = 0; i < 10; i++ ) {

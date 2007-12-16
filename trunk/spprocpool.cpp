@@ -70,7 +70,7 @@ time_t SP_ProcInfo :: getLastActiveTime() const
 
 void SP_ProcInfo :: dump() const
 {
-	syslog( LOG_NOTICE, "NOTICE: pid %d, pipeFd %d, requests %d, lastActiveTime %ld",
+	syslog( LOG_INFO, "INFO: pid %d, pipeFd %d, requests %d, lastActiveTime %ld",
 		mPid, mPipeFd, mRequests, mLastActiveTime );
 }
 
@@ -175,22 +175,7 @@ SP_ProcPool :: SP_ProcPool( int mgrPipe )
 	mList = new SP_ProcInfoList();
 
 	mMaxRequestsPerProc = 0;
-	mMaxIdleTimeout = 0;
-
-	pthread_attr_t attr;
-	pthread_attr_init( &attr );
-	assert( pthread_attr_setstacksize( &attr, 1024 * 1024 ) == 0 );
-	pthread_attr_setdetachstate( &attr, PTHREAD_CREATE_DETACHED );
-
-	pthread_t thread = 0;
-	int ret = pthread_create( &thread, &attr, reinterpret_cast<void*(*)(void*)>(checkTimeout), this );
-	pthread_attr_destroy( &attr );
-	if( 0 == ret ) {
-		syslog( LOG_NOTICE, "Thread #%ld has been created to check timeout proc", thread );
-	} else {
-		syslog( LOG_WARNING, "Unable to create a thread to check timeout proc, errno %d, %s",
-				errno, strerror( errno ) );
-	}
+	mMaxIdleProc = 0;
 }
 
 SP_ProcPool :: ~SP_ProcPool()
@@ -216,9 +201,24 @@ void SP_ProcPool :: setMaxRequestsPerProc( int maxRequestsPerProc )
 	mMaxRequestsPerProc = maxRequestsPerProc;
 }
 
-void SP_ProcPool :: setMaxIdleTimeout( int maxIdleTimeout )
+void SP_ProcPool :: setMaxIdleProc( int maxIdleProc )
 {
-	mMaxIdleTimeout = maxIdleTimeout;
+	mMaxIdleProc = maxIdleProc;
+}
+
+int SP_ProcPool :: initStartProc( int startProc )
+{
+	SP_ProcInfoList list;
+	for( int i = 0; i < startProc; i++ ) {
+		SP_ProcInfo * info = get();
+		list.append( info );
+	}
+
+	for( ; list.getCount() > 0; ) {
+		save( list.takeItem( 0 ) );
+	}
+
+	return 0;
 }
 
 SP_ProcInfo * SP_ProcPool :: get()
@@ -232,7 +232,7 @@ SP_ProcInfo * SP_ProcPool :: get()
 		ret = mList->takeItem( mList->getCount() - 1);
 
 		if( 0 != kill( ret->getPid(), 0 ) ) {
-			syslog( LOG_INFO, "INFO: process #%d is not exist, remove", ret->getPid() );
+			syslog( LOG_DEBUG, "DEBUG: process #%d is not exist, remove", ret->getPid() );
 			delete ret;
 			ret = NULL;
 		}
@@ -276,59 +276,30 @@ SP_ProcInfo * SP_ProcPool :: get()
 void SP_ProcPool :: save( SP_ProcInfo * procInfo )
 {
 	if( mMaxRequestsPerProc > 0 && procInfo->getRequests() >= mMaxRequestsPerProc ) {
-		syslog( LOG_NOTICE, "NOTICE: process #%d serve %d requests, remove",
+		syslog( LOG_DEBUG, "DEBUG: process #%d serve %d requests, remove",
 				procInfo->getPid(), procInfo->getRequests() );
 		delete procInfo;
 	} else {
 		pthread_mutex_lock( &mMutex );
 
-		procInfo->setLastActiveTime( time( NULL ) );
-		mList->append( procInfo );
+		if( mMaxIdleProc > 0 && mList->getCount() >= mMaxIdleProc ) {
+			syslog( LOG_DEBUG, "DEBUG: too many idle process, remove process #%d",
+					procInfo->getPid() );
+			delete procInfo;
+		} else {
+			syslog( LOG_DEBUG, "DEBUG: save process #%d", procInfo->getPid() );
+
+			procInfo->setLastActiveTime( time( NULL ) );
+			mList->append( procInfo );
+		}
 
 		pthread_mutex_unlock( &mMutex );
-		syslog( LOG_INFO, "INFO: save pid #%d, fd %d",
-				procInfo->getPid(), procInfo->getPipeFd() );
 	}
 }
 
 void SP_ProcPool :: erase( SP_ProcInfo * procInfo )
 {
-	syslog( LOG_INFO, "INFO: erase pid #%d, fd %d",
-			procInfo->getPid(), procInfo->getPipeFd() );
+	syslog( LOG_DEBUG, "DEBUG: erase process #%d", procInfo->getPid() );
 	delete procInfo;
-}
-
-void * SP_ProcPool :: checkTimeout( void * args )
-{
-	SP_ProcPool * pool = (SP_ProcPool*)args;
-
-	for( ; pool->mMgrPipe >= 0; sleep( 10 ) ) {
-
-		if( pool->mMaxIdleTimeout <= 0 ) continue;
-
-		pthread_mutex_lock( &( pool->mMutex ) );
-
-		time_t nowTime = time( NULL );
-
-		SP_ProcInfoList * list = pool->mList;
-
-		int removeCount = list->getCount() / 2;
-		removeCount = removeCount > 0 ? removeCount : 1;
-
-		for( int i = list->getCount() - 1; i >= 0 && removeCount > 0; i-- ) {
-			const SP_ProcInfo * info = list->getItem( i );
-			if( nowTime - info->getLastActiveTime() >= pool->mMaxIdleTimeout ) {
-				syslog( LOG_INFO, "INFO: process #%d is idle timeout, remove", info->getPid() );
-				info = list->takeItem( i );
-				delete info;
-
-				removeCount++;
-			}
-		}
-
-		pthread_mutex_unlock( &( pool->mMutex ) );
-	}
-
-	return NULL;
 }
 

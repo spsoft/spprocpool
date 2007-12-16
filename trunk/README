@@ -19,8 +19,13 @@ $ make
 This will build all the targets include examples. You can run the
 example programs:
 
-$ testprocpool
-$ testprocdatum
+$ ./testprocinet
+This test case is similar to the <Unix Network Programming, V1, Third Ed>
+chapter 30.9 TCP Preforked Server, Descriptor Passing
+You can run the testinetclient to communicate with this server
+
+testprocinet[17885]: Listen on port [1770]
+
 
 
 Reports of successful use of spxml are appreciated.
