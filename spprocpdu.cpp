@@ -63,6 +63,40 @@ void SP_ProcDataBlock :: reset()
 
 //-------------------------------------------------------------------
 
+SP_ProcClock :: SP_ProcClock()
+{
+	gettimeofday ( &mBornTime, NULL ); 
+	gettimeofday ( &mPrevTime, NULL ); 
+}
+
+SP_ProcClock :: ~SP_ProcClock()
+{
+}
+
+long SP_ProcClock :: getAge()
+{
+	struct timeval now;
+	gettimeofday ( &now, NULL ); 
+
+	return (long)( ( 1000000.0 * ( now.tv_sec - mBornTime.tv_sec )
+			+ ( now.tv_usec - mBornTime.tv_usec ) ) / 1000.0 );
+}
+
+long SP_ProcClock :: getInterval()
+{
+	struct timeval now;
+	gettimeofday ( &now, NULL ); 
+
+	long ret = long( ( 1000000.0 * ( now.tv_sec - mPrevTime.tv_sec )
+			+ ( now.tv_usec - mPrevTime.tv_usec ) ) / 1000.0 );
+
+	mPrevTime = now;
+
+	return ret;
+}
+
+//-------------------------------------------------------------------
+
 #define CONTROLLEN sizeof (struct cmsghdr) + sizeof (int)
 
 int SP_ProcPduUtils :: recv_fd( int sockfd )

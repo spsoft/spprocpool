@@ -15,6 +15,9 @@
 #include <sys/wait.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netinet/tcp.h>
+
+#include "spprocpdu.hpp"
 
 
 #define	MAXN	16384		/* max # bytes to request from server */
@@ -66,12 +69,21 @@ int main(int argc, char **argv)
 
 	for (i = 0; i < nchildren; i++) {
 		if ( (pid = fork()) == 0) {		/* child */
+			SP_ProcClock clock;
+
+			int gt100ms = 0, lt50ms = 0;
+
 			for (j = 0; j < nloops; j++) {
 				fd = tcp_connect(argv[1], atoi( argv[2]) );
+
+				int connectTime = clock.getInterval();
 
 				linger.l_onoff = 1;
 				linger.l_linger = 1;
 				setsockopt( fd, SOL_SOCKET, SO_LINGER, (void *)&linger, sizeof(linger));
+
+				int flags = 1;
+				setsockopt( fd, IPPROTO_TCP, TCP_NODELAY, &flags, sizeof(flags) );
 
 				write(fd, request, strlen(request));
 
@@ -81,8 +93,17 @@ int main(int argc, char **argv)
 				}
 
 				close(fd);		/* TIME_WAIT on client, not server */
+
+				int socketTime = clock.getInterval();
+				if( ( connectTime + socketTime ) > 100 ) {
+					gt100ms++;
+					printf( "child %d, loop %d, connect.time %d, socket.time %d\n",
+						i, j, connectTime, socketTime );
+				}
+				if( ( connectTime + socketTime ) < 50 ) lt50ms++;
 			}
-			printf("child %d done\n", i);
+			printf("child %d done, time %d, %d ( > 100ms ), %d ( < 50 )\n",
+				i, clock.getAge(), gt100ms, lt50ms );
 			exit(0);
 		}
 		/* parent loops around to fork() again */

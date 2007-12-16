@@ -34,6 +34,22 @@ private:
 	size_t mDataSize;
 };
 
+class SP_ProcClock {
+public:
+	SP_ProcClock();
+	~SP_ProcClock();
+
+	// @return ms
+	long getAge();
+
+	// @return ms
+	long getInterval();
+
+private:
+	struct timeval mBornTime;
+	struct timeval mPrevTime;
+};
+
 class SP_ProcPduUtils {
 public:
 

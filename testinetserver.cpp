@@ -13,6 +13,8 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 
 #include "spprocinet.hpp"
 #include "spprocpdu.hpp"
@@ -26,14 +28,17 @@ public:
 	virtual ~SP_ProcUnpService() {}
 
 	virtual void handle( int sockfd ) {
-		int			ntowrite;
-		ssize_t		nread;
-		char		line[MAXLINE], result[MAXN];
+		int ntowrite;
+		ssize_t nread;
+		char line[MAXLINE], result[MAXN];
 
 		struct linger linger;
 		linger.l_onoff = 1;
 		linger.l_linger = 1;
 		setsockopt( sockfd, SOL_SOCKET, SO_LINGER, (void *)&linger, sizeof(linger));
+
+		int flags = 1;
+		setsockopt( sockfd, IPPROTO_TCP, TCP_NODELAY, &flags, sizeof(flags) );
 
 		for ( ; ; ) {
 			if ( (nread = read(sockfd, line, MAXLINE)) == 0) {
