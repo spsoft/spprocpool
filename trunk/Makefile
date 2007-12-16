@@ -53,7 +53,7 @@ testinetserver: testinetserver.o
 	$(LINKER) $(LDFLAGS) $^ -o $@ -L. -lspprocpool
 
 testinetclient: testinetclient.o
-	$(LINKER) $(LDFLAGS) $^ -o $@
+	$(LINKER) $(LDFLAGS) $^ -o $@ -L. -lspprocpool
 
 dist: clean spprocpool-$(version).src.tar.gz
 
