@@ -63,8 +63,14 @@ public:
 	SP_ProcPool( int mgrPipe );
 	~SP_ProcPool();
 
+	// default is 0, unlimited
 	void setMaxRequestsPerProc( int maxRequestsPerProc );
-	void setMaxIdleTimeout( int maxIdleTimeout );
+
+	// default is 0, unlimited
+	void setMaxIdleProc( int maxIdleProc );
+
+	// default is 0, no start proc
+	int initStartProc( int startProc );
 
 	SP_ProcInfo * get();
 
@@ -81,9 +87,7 @@ private:
 	SP_ProcInfoList * mList;
 	pthread_mutex_t mMutex;
 
-	int mMaxRequestsPerProc, mMaxIdleTimeout;
-
-	static void * checkTimeout( void * args );
+	int mMaxRequestsPerProc, mMaxIdleProc;
 };
 
 #endif

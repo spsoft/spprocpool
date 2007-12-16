@@ -23,11 +23,13 @@ endif
 
 #--------------------------------------------------------------------
 
-LIBOBJS = spprocpdu.o spprocmanager.o spprocpool.o spprocdatum.o
+LIBOBJS = spprocpdu.o spprocmanager.o spprocpool.o \
+		spprocdatum.o spprocinet.o
 
 TARGET =  libspprocpool.so
 
-TEST_TARGET = testprocpdu testprocpool testprocdatum
+TEST_TARGET = testprocpdu testprocpool testprocdatum \
+		testinetserver testinetclient
 
 #--------------------------------------------------------------------
 
@@ -46,6 +48,12 @@ testprocpool: testprocpool.o
 
 testprocdatum: testprocdatum.o
 	$(LINKER) $(LDFLAGS) $^ -o $@ -L. -lspprocpool
+
+testinetserver: testinetserver.o
+	$(LINKER) $(LDFLAGS) $^ -o $@ -L. -lspprocpool
+
+testinetclient: testinetclient.o
+	$(LINKER) $(LDFLAGS) $^ -o $@
 
 dist: clean spprocpool-$(version).src.tar.gz
 

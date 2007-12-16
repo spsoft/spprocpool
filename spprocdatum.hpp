@@ -30,10 +30,13 @@ public:
 			SP_ProcDatumHandler * handler );
 	~SP_ProcDatumDispatcher();
 
-	void setMaxRequestsPerProc( int maxRequestsPerProc );
+	// get the proc pool object to set parameters
+	SP_ProcPool * getProcPool();
 
-	void setMaxIdleTimeout( int maxIdleTimeout );
+	// default is 128
+	void setMaxProc( int maxProc );
 
+	// > 0 : Success, < 0 : fail, reach MaxProc limit or cannot get a process
 	pid_t dispatch( const void * request, size_t len );
 
 	void dump() const;
@@ -51,6 +54,8 @@ private:
 	pthread_cond_t mCond;
 
 	SP_ProcInfoListEx * mBusyList;
+
+	int mMaxProc;
 
 	static void * checkReply( void * );
 };

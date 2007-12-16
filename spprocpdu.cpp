@@ -14,6 +14,13 @@
 #include <syslog.h>
 #include <string.h>
 #include <assert.h>
+#include <sys/time.h>
+#include <sys/resource.h>
+
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netinet/tcp.h>
+#include <fcntl.h>
 
 #include "spprocpdu.hpp"
 
@@ -214,4 +221,87 @@ int SP_ProcPduUtils :: send_pdu( int fd, const SP_ProcPdu_t * pdu, const void * 
 	return ret;
 }
 
+int SP_ProcPduUtils :: tcp_listen( const char * ip, int port, int * fd )
+{
+	int ret = 0;
+
+	int listenFd = socket( AF_INET, SOCK_STREAM, 0 );
+	if( listenFd < 0 ) {
+		syslog( LOG_WARNING, "listen failed, errno %d, %s", errno, strerror( errno ) );
+		ret = -1;
+	}
+
+	if( 0 == ret ) {
+		int flags = 1;
+		if( setsockopt( listenFd, SOL_SOCKET, SO_REUSEADDR, &flags, sizeof( flags ) ) < 0 ) {
+			syslog( LOG_WARNING, "failed to set setsock to reuseaddr" );
+			ret = -1;
+		}
+		if( setsockopt( listenFd, IPPROTO_TCP, TCP_NODELAY, &flags, sizeof(flags) ) < 0 ) {
+			syslog( LOG_WARNING, "failed to set socket to nodelay" );
+			ret = -1;
+		}
+	}
+
+	struct sockaddr_in addr;
+
+	if( 0 == ret ) {
+		memset( &addr, 0, sizeof( addr ) );
+		addr.sin_family = AF_INET;
+		addr.sin_port = htons( port );
+
+		addr.sin_addr.s_addr = INADDR_ANY;
+		if( '\0' != *ip ) {
+			if( 0 != inet_aton( ip, &addr.sin_addr ) ) {
+				syslog( LOG_WARNING, "failed to convert %s to inet_addr", ip );
+				ret = -1;
+			}
+		}
+	}
+
+	if( 0 == ret ) {
+		if( bind( listenFd, (struct sockaddr*)&addr, sizeof( addr ) ) < 0 ) {
+			syslog( LOG_WARNING, "bind failed, errno %d, %s", errno, strerror( errno ) );
+			ret = -1;
+		}
+	}
+
+	if( 0 == ret ) {
+		if( ::listen( listenFd, 5 ) < 0 ) {
+			syslog( LOG_WARNING, "listen failed, errno %d, %s", errno, strerror( errno ) );
+			ret = -1;
+		}
+	}
+
+	if( 0 != ret && listenFd >= 0 ) close( listenFd );
+
+	if( 0 == ret ) {
+		* fd = listenFd;
+		syslog( LOG_NOTICE, "Listen on port [%d]", port );
+	}
+
+	return ret;
+}
+
+void SP_ProcPduUtils :: print_cpu_time()
+{
+	double user, sys;
+	struct rusage myusage, childusage;
+
+	if (getrusage(RUSAGE_SELF, &myusage) < 0)
+		perror("getrusage error");
+	if (getrusage(RUSAGE_CHILDREN, &childusage) < 0)
+		perror("getrusage error");
+
+	user = (double) myusage.ru_utime.tv_sec +
+			myusage.ru_utime.tv_usec/1000000.0;
+	user += (double) childusage.ru_utime.tv_sec +
+			childusage.ru_utime.tv_usec/1000000.0;
+	sys = (double) myusage.ru_stime.tv_sec +
+			myusage.ru_stime.tv_usec/1000000.0;
+	sys += (double) childusage.ru_stime.tv_sec +
+			childusage.ru_stime.tv_usec/1000000.0;
+
+	printf("\nuser time = %g, sys time = %g\n", user, sys);
+}
 
