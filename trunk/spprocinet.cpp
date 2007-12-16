@@ -185,6 +185,8 @@ int SP_ProcInetServer :: start()
 			maxfd = maxfd > iter->getPipeFd() ? maxfd : iter->getPipeFd();
 		}
 
+		if( mBusyList->getCount() >= mMaxProc ) FD_CLR( listenfd, &rset );
+
 		int nsel = select( maxfd + 1, &rset, NULL, NULL, NULL );
 
 		/* check for new connections */
