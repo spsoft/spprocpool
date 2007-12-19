@@ -301,7 +301,7 @@ int SP_ProcPduUtils :: tcp_listen( const char * ip, int port, int * fd )
 	}
 
 	if( 0 == ret ) {
-		if( ::listen( listenFd, 5 ) < 0 ) {
+		if( ::listen( listenFd, 1024 ) < 0 ) {
 			syslog( LOG_WARNING, "listen failed, errno %d, %s", errno, strerror( errno ) );
 			ret = -1;
 		}
