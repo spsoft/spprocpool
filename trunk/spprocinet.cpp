@@ -60,6 +60,7 @@ void SP_ProcWorkerInetAdapter :: process( const SP_ProcInfo * procInfo )
 		int fd = SP_ProcPduUtils::recv_fd( procInfo->getPipeFd() );
 		if( fd >= 0 ) {
 			mService->handle( fd );
+			close( fd );
 
 			SP_ProcPdu_t replyPdu;
 			memset( &replyPdu, 0, sizeof( SP_ProcPdu_t ) );

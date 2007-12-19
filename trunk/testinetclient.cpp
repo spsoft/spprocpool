@@ -78,13 +78,6 @@ int main(int argc, char **argv)
 
 				int connectTime = clock.getInterval();
 
-				linger.l_onoff = 1;
-				linger.l_linger = 1;
-				setsockopt( fd, SOL_SOCKET, SO_LINGER, (void *)&linger, sizeof(linger));
-
-				int flags = 1;
-				setsockopt( fd, IPPROTO_TCP, TCP_NODELAY, &flags, sizeof(flags) );
-
 				write(fd, request, strlen(request));
 
 				if ( (n = read(fd, reply, nbytes)) != nbytes) {
