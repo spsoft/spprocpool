@@ -268,7 +268,7 @@ SP_ProcInfo * SP_ProcPool :: get()
 		}
 	}
 
-	ret->setRequests( ret->getRequests() + 1 );
+	if( NULL != ret ) ret->setRequests( ret->getRequests() + 1 );
 
 	return ret;
 }
