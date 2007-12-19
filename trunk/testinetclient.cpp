@@ -54,7 +54,6 @@ int main(int argc, char **argv)
 	pid_t	pid;
 	ssize_t	n;
 	char	request[MAXLINE], reply[MAXN];
-	struct linger linger;
 
 	if (argc != 6) {
 		printf("usage: client <hostname or IPaddr> <port> <#children> "
@@ -71,32 +70,38 @@ int main(int argc, char **argv)
 		if ( (pid = fork()) == 0) {		/* child */
 			SP_ProcClock clock;
 
-			int gt100ms = 0, lt50ms = 0;
+			int gt10ms = 0, lt10ms = 0, connFail = 0;
 
 			for (j = 0; j < nloops; j++) {
 				fd = tcp_connect(argv[1], atoi( argv[2]) );
 
 				int connectTime = clock.getInterval();
 
-				write(fd, request, strlen(request));
+				if( fd >= 0 ) {
+					write(fd, request, strlen(request));
 
-				if ( (n = read(fd, reply, nbytes)) != nbytes) {
-					printf("server returned %d bytes\n", n);
-					exit( -1 );
+					if ( (n = SP_ProcPduUtils::readn(fd, reply, nbytes)) != nbytes) {
+						printf("server returned %d bytes\n", n);
+						exit( -1 );
+					}
+
+					close(fd);		/* TIME_WAIT on client, not server */
+				} else {
+					connFail++;
 				}
-
-				close(fd);		/* TIME_WAIT on client, not server */
 
 				int socketTime = clock.getInterval();
-				if( ( connectTime + socketTime ) > 100 ) {
-					gt100ms++;
-					printf( "child %d, loop %d, connect.time %d, socket.time %d\n",
-						i, j, connectTime, socketTime );
+
+				if( ( connectTime + socketTime ) > 10 ) {
+					gt10ms++;
+					//printf( "child %d, loop %d, connect.time %d, socket.time %d\n",
+						//i, j, connectTime, socketTime );
+				} else {
+					lt10ms++;
 				}
-				if( ( connectTime + socketTime ) < 50 ) lt50ms++;
 			}
-			printf("child %d done, time %d, %d ( > 100ms ), %d ( < 50 )\n",
-				i, clock.getAge(), gt100ms, lt50ms );
+			printf("child %d done, time %d, %d ( > 10ms ), %d ( <= 10 ), conn.fail %d\n",
+				i, clock.getAge(), gt10ms, lt10ms, connFail );
 			exit(0);
 		}
 		/* parent loops around to fork() again */

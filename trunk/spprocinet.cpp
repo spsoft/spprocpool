@@ -192,21 +192,23 @@ int SP_ProcInetServer :: start()
 
 		/* check for new connections */
 		if( FD_ISSET( listenfd, &rset ) && mBusyList->getCount() < mMaxProc ) {
-			struct sockaddr_in clientAddr;
-			socklen_t clientLen = sizeof( clientAddr );
+			SP_ProcInfo * info = mPool->get();
 
-			int clientFd = accept( listenfd, (struct sockaddr *)&clientAddr, &clientLen );
+			if( NULL != info ) {
+				struct sockaddr_in clientAddr;
+				socklen_t clientLen = sizeof( clientAddr );
+				int clientFd = accept( listenfd, (struct sockaddr *)&clientAddr, &clientLen );
 
-			if( clientFd >= 0 ) {
-				SP_ProcInfo * info = mPool->get();
-
-				if( 0 == SP_ProcPduUtils::send_fd( info->getPipeFd(), clientFd ) ) {
-					mBusyList->append( info );
+				if( clientFd >= 0 ) {
+					if( 0 == SP_ProcPduUtils::send_fd( info->getPipeFd(), clientFd ) ) {
+						mBusyList->append( info );
+					} else {
+						mPool->erase( info );
+					}
+					close( clientFd );
 				} else {
-					mPool->erase( info );
+					mPool->save( info );
 				}
-
-				close( clientFd );
 			}
 
 			if (--nsel == 0) continue;	/* all done with select() results */
