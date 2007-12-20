@@ -180,7 +180,7 @@ SP_ProcPool :: SP_ProcPool( int mgrPipe )
 
 SP_ProcPool :: ~SP_ProcPool()
 {
-	close( mMgrPipe );
+	if( mMgrPipe >= 0 ) close( mMgrPipe );
 	mMgrPipe = -1;
 
 	pthread_mutex_destroy( &mMutex );
@@ -199,6 +199,11 @@ void SP_ProcPool :: dump() const
 void SP_ProcPool :: setMaxRequestsPerProc( int maxRequestsPerProc )
 {
 	mMaxRequestsPerProc = maxRequestsPerProc;
+}
+
+int SP_ProcPool :: getMaxRequestsPerProc() const
+{
+	return mMaxRequestsPerProc;
 }
 
 void SP_ProcPool :: setMaxIdleProc( int maxIdleProc )

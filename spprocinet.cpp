@@ -34,24 +34,24 @@ SP_ProcInetServiceFactory :: ~SP_ProcInetServiceFactory()
 
 class SP_ProcWorkerInetAdapter : public SP_ProcWorker {
 public:
-	SP_ProcWorkerInetAdapter( SP_ProcInetService * service );
+	SP_ProcWorkerInetAdapter( SP_ProcInetServiceFactory * factory );
 	~SP_ProcWorkerInetAdapter();
 
 	virtual void process( const SP_ProcInfo * procInfo );
 
 private:
-	SP_ProcInetService * mService;
+	SP_ProcInetServiceFactory * mFactory;
 };
 
-SP_ProcWorkerInetAdapter :: SP_ProcWorkerInetAdapter( SP_ProcInetService * service )
+SP_ProcWorkerInetAdapter :: SP_ProcWorkerInetAdapter( SP_ProcInetServiceFactory * factory )
 {
-	mService = service;
+	mFactory = factory;
 }
 
 SP_ProcWorkerInetAdapter :: ~SP_ProcWorkerInetAdapter()
 {
-	delete mService;
-	mService = NULL;
+	delete mFactory;
+	mFactory = NULL;
 }
 
 void SP_ProcWorkerInetAdapter :: process( const SP_ProcInfo * procInfo )
@@ -59,8 +59,12 @@ void SP_ProcWorkerInetAdapter :: process( const SP_ProcInfo * procInfo )
 	for( ; ; ) {
 		int fd = SP_ProcPduUtils::recv_fd( procInfo->getPipeFd() );
 		if( fd >= 0 ) {
-			mService->handle( fd );
+			SP_ProcInetService * service = mFactory->create();
+
+			service->handle( fd );
 			close( fd );
+
+			delete service;
 
 			SP_ProcPdu_t replyPdu;
 			memset( &replyPdu, 0, sizeof( SP_ProcPdu_t ) );
@@ -105,7 +109,7 @@ SP_ProcWorkerFactoryInetAdapter :: ~SP_ProcWorkerFactoryInetAdapter()
 
 SP_ProcWorker * SP_ProcWorkerFactoryInetAdapter :: create() const
 {
-	return new SP_ProcWorkerInetAdapter( mFactory->create() );
+	return new SP_ProcWorkerInetAdapter( mFactory );
 }
 
 //-------------------------------------------------------------------

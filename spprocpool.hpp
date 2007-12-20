@@ -65,6 +65,7 @@ public:
 
 	// default is 0, unlimited
 	void setMaxRequestsPerProc( int maxRequestsPerProc );
+	int getMaxRequestsPerProc() const;
 
 	// default is 0, unlimited
 	void setMaxIdleProc( int maxIdleProc );
