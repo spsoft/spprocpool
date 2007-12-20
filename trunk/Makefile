@@ -24,12 +24,12 @@ endif
 #--------------------------------------------------------------------
 
 LIBOBJS = spprocpdu.o spprocmanager.o spprocpool.o \
-		spprocdatum.o spprocinet.o
+		spprocdatum.o spprocinet.o spproclfsvr.o
 
 TARGET =  libspprocpool.so
 
 TEST_TARGET = testprocpdu testprocpool testprocdatum \
-		testinetserver testinetclient
+		testinetserver testlfserver testinetclient
 
 #--------------------------------------------------------------------
 
@@ -50,6 +50,9 @@ testprocdatum: testprocdatum.o
 	$(LINKER) $(LDFLAGS) $^ -o $@ -L. -lspprocpool
 
 testinetserver: testinetserver.o
+	$(LINKER) $(LDFLAGS) $^ -o $@ -L. -lspprocpool
+
+testlfserver: testlfserver.o
 	$(LINKER) $(LDFLAGS) $^ -o $@ -L. -lspprocpool
 
 testinetclient: testinetclient.o
