@@ -35,13 +35,16 @@ public:
 			SP_ProcInetServiceFactory * factory );
 	~SP_ProcInetServer();
 
-	// default is 
+	// default is 64
 	void setMaxProc( int maxProc );
 
+	// default is 0, unlimited
 	void setMaxRequestsPerProc( int maxRequestsPerProc );
 
+	// default is 5
 	void setMaxIdleProc( int maxIdleProc );
 
+	// default is 1
 	void setMinIdleProc( int minIdleProc );
 
 	int start();

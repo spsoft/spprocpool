@@ -96,8 +96,9 @@ int main( int argc, char * argv[] )
 
 	SP_ProcLFServer server( "", port, new SP_ProcUnpServiceFactory() );
 
-	server.setMaxProc( 10 );
-	//server.setMaxRequestsPerProc( 10 );
+	//server.setMaxProc( 10 );
+	//server.setMaxIdleProc( 5 );
+	//server.setMaxIdleProc( 1 );
 
 	server.start();
 
