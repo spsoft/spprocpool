@@ -15,7 +15,7 @@ class SP_ProcWorker {
 public:
 	virtual ~SP_ProcWorker();
 
-	virtual void process( const SP_ProcInfo * procInfo ) = 0;
+	virtual void process( SP_ProcInfo * procInfo ) = 0;
 };
 
 class SP_ProcWorkerFactory {

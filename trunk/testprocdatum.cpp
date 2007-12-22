@@ -21,7 +21,7 @@ public:
 
 	virtual void handle( const SP_ProcDataBlock * request, SP_ProcDataBlock * reply ) {
 		char buff[ 512 ] = { 0 };
-		snprintf( buff, sizeof( buff ), "worker #%d - %s", getpid(), (char*)request->getData() );
+		snprintf( buff, sizeof( buff ), "worker #%d - %s", (int)getpid(), (char*)request->getData() );
 		reply->setData( strdup( buff ), strlen( buff ) );
 	}
 };
@@ -47,7 +47,7 @@ public:
 	}
 
 	virtual void onError( pid_t pid ) {
-		printf( "erro: process %d\n", pid );
+		printf( "erro: process %d\n", (int)pid );
 	}
 };
 
@@ -68,7 +68,7 @@ int main( int argc, char * argv[] )
 	for( int i = 0; i < 10; i++ ) {
 		snprintf( buff, sizeof( buff ), "Index %d, Hello world!", i );
 		pid_t pid = dispatcher.dispatch( buff, strlen( buff ) );
-		printf( "dispatch %d to worker #%d\n", i, pid );
+		printf( "dispatch %d to worker #%d\n", i, (int)pid );
 
 		if( 0 == ( i % 3 ) ) sleep( 1 );
 	}

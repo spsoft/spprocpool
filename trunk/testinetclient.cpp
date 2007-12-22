@@ -81,7 +81,7 @@ int main(int argc, char **argv)
 					write(fd, request, strlen(request));
 
 					if ( (n = SP_ProcPduUtils::readn(fd, reply, nbytes)) != nbytes) {
-						printf("server returned %d bytes\n", n);
+						printf("server returned %d bytes\n", (int)n);
 						exit( -1 );
 					}
 
