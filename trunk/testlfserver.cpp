@@ -102,9 +102,9 @@ int main( int argc, char * argv[] )
 	SP_ProcLFServer server( "", port, new SP_ProcUnpServiceFactory() );
 
 	// make a fixed number proc pool
-	//server.setMaxProc( procCount );
-	//server.setMaxIdleProc( procCount );
-	//server.setMinIdleProc( procCount );
+	server.setMaxProc( procCount );
+	server.setMaxIdleProc( procCount );
+	server.setMinIdleProc( procCount );
 
 	server.start();
 
