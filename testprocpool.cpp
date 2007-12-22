@@ -18,13 +18,13 @@ public:
 	SP_EchoWorker(){}
 	virtual ~SP_EchoWorker(){}
 
-	virtual void process( const SP_ProcInfo * procInfo ) {
+	virtual void process( SP_ProcInfo * procInfo ) {
 		for( ; ; ) {
 			char buff[ 256 ] = { 0 };
 			int len = read( procInfo->getPipeFd(), buff, sizeof( buff ) );
 			if( len > 0 ) {
 				char newBuff[ 256 ] = { 0 };
-				snprintf( newBuff, sizeof( newBuff ), "<%d> %s", getpid(), buff );
+				snprintf( newBuff, sizeof( newBuff ), "<%d> %s", (int)getpid(), buff );
 				write( procInfo->getPipeFd(), newBuff, strlen( newBuff ) );
 			} else {
 				break;
@@ -57,7 +57,7 @@ void * echoWorkerCaller( void * args )
 		char buff[ 256 ] = { 0 };
 		memset( buff, 0, sizeof( buff ) );
 		if( read( info->getPipeFd(), buff, sizeof( buff ) - 1 ) ) {
-			printf( "read: %d - %s\n", info->getPid(), buff );
+			printf( "read: %d - %s\n", (int)info->getPid(), buff );
 		}
 	}
 

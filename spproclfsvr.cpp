@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <stdio.h>
+#include <fcntl.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -29,7 +30,7 @@ public:
 
 	void setMaxRequestsPerProc( int maxRequestsPerProc );
 
-	virtual void process( const SP_ProcInfo * procInfo );
+	virtual void process( SP_ProcInfo * procInfo );
 
 private:
 	int mListenfd;
@@ -57,50 +58,46 @@ void SP_ProcWorkerLFAdapter :: setMaxRequestsPerProc( int maxRequestsPerProc )
 	mMaxRequestsPerProc = maxRequestsPerProc;
 }
 
-void SP_ProcWorkerLFAdapter :: process( const SP_ProcInfo * procInfo )
+void SP_ProcWorkerLFAdapter :: process( SP_ProcInfo * procInfo )
 {
 	mFactory->workerInit( procInfo );
 
-	fd_set masterset;
+	for( ; ( 0 == mMaxRequestsPerProc )
+			|| ( mMaxRequestsPerProc > 0 && procInfo->getRequests() <= mMaxRequestsPerProc ); ) {
 
-	FD_ZERO( &masterset );
-	FD_SET( mListenfd, &masterset );
-	FD_SET( procInfo->getPipeFd(), &masterset );
+		struct sockaddr_in clientAddr;
+		socklen_t clientLen = sizeof( clientAddr );
+		int fd = accept( mListenfd, (struct sockaddr *)&clientAddr, &clientLen );
+		if( fd >= 0 ) {
+			assert( write( procInfo->getPipeFd(), &SP_ProcLFServer::CHAR_BUSY, 1 ) > 0 );
 
-	int maxfd = mListenfd > procInfo->getPipeFd() ? mListenfd : procInfo->getPipeFd();
+			SP_ProcInetService * service = mFactory->create();
+			service->handle( fd );
+			close( fd );
+			delete service;
 
-	for( int i = 0; ( 0 == mMaxRequestsPerProc )
-			|| ( mMaxRequestsPerProc > 0 && i <=  mMaxRequestsPerProc ); i++ ) {
+			assert( write( procInfo->getPipeFd(), &SP_ProcLFServer::CHAR_IDLE, 1 ) > 0 );
 
-		fd_set rset = masterset;
-		select( maxfd + 1, &rset, NULL, NULL, NULL );
+			procInfo->setRequests( procInfo->getRequests() + 1 );
+		} else {
+			syslog( LOG_WARNING, "WARN: accept fail, errno %d, %s", errno, strerror( errno ) );
 
-		if( FD_ISSET( mListenfd, &rset ) ) {
-			struct sockaddr_in clientAddr;
-			socklen_t clientLen = sizeof( clientAddr );
-			int fd = accept( mListenfd, (struct sockaddr *)&clientAddr, &clientLen );
-			if( fd >= 0 ) {
-				assert( write( procInfo->getPipeFd(), &SP_ProcLFServer::CHAR_BUSY, 1 ) > 0 );
-
-				SP_ProcInetService * service = mFactory->create();
-				service->handle( fd );
-				close( fd );
-				delete service;
-
-				assert( write( procInfo->getPipeFd(), &SP_ProcLFServer::CHAR_IDLE, 1 ) > 0 );
+			if( errno == EWOULDBLOCK || errno == ECONNABORTED || errno == EPROTO || errno == EINTR ) {
+				// ignore these errno
 			} else {
-				syslog( LOG_WARNING, "WARN: accept fail, errno %d, %s", errno, strerror( errno ) );
-
 				assert( write( procInfo->getPipeFd(), &SP_ProcLFServer::CHAR_EXIT, 1 ) > 0 );
 				break;
 			}
 		}
 
-		if( FD_ISSET( procInfo->getPipeFd(), &rset ) ) {
+		char pod = 0;
+		if( recv( procInfo->getPipeFd(), &pod, 1, MSG_DONTWAIT ) > 0 ) {
 			assert( write( procInfo->getPipeFd(), &SP_ProcLFServer::CHAR_EXIT, 1 ) > 0 );
 			break;
 		}
 	}
+
+	procInfo->setLastActiveTime( time( NULL ) );
 
 	mFactory->workerEnd( procInfo );
 }
@@ -302,9 +299,12 @@ int SP_ProcLFServer :: start()
 			for( int i = 0; i < procList.getCount(); i++ ) {
 				SP_ProcInfo * iter = procList.getItem( i );
 				if( iter->isIdle() ) {
-					write( iter->getPipeFd(), &CHAR_EXIT, 1 );
 					syslog( LOG_INFO, "INFO: idle.count %d, max.idle %d, force proc #%u to exit",
 						idleCount, mMaxIdleProc, iter->getPid() );
+					write( iter->getPipeFd(), &CHAR_EXIT, 1 );
+					iter->setIdle( 0 );
+					idleCount--;
+
 					break;
 				}
 			}

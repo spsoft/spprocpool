@@ -49,7 +49,7 @@ public:
 	SP_ProcWorkerDatumAdapter( SP_ProcDatumServiceFactory * factory );
 	virtual ~SP_ProcWorkerDatumAdapter();
 
-	virtual void process( const SP_ProcInfo * procInfo );
+	virtual void process( SP_ProcInfo * procInfo );
 
 private:
 	SP_ProcDatumServiceFactory * mFactory;
@@ -64,7 +64,7 @@ SP_ProcWorkerDatumAdapter :: ~SP_ProcWorkerDatumAdapter()
 {
 }
 
-void SP_ProcWorkerDatumAdapter :: process( const SP_ProcInfo * procInfo )
+void SP_ProcWorkerDatumAdapter :: process( SP_ProcInfo * procInfo )
 {
 	mFactory->workerInit( procInfo );
 

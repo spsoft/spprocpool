@@ -18,6 +18,7 @@
 
 #include "spprocinet.hpp"
 #include "spprocpdu.hpp"
+#include "spprocpool.hpp"
 
 #define MAXN    16384           /* max # bytes client can request */
 #define MAXLINE         4096    /* max text line length */
@@ -60,9 +61,13 @@ public:
 
 	virtual void workerInit( const SP_ProcInfo * procInfo ) {
 		signal( SIGINT, SIG_DFL );
+		printf( "pid %d start\n", (int)procInfo->getPid() );
 	}
 
 	virtual void workerEnd( const SP_ProcInfo * procInfo ) {
+		printf( "pid %d, pipeFd %d, requests %d, lastActiveTime %ld\n",
+				(int)procInfo->getPid(), procInfo->getPipeFd(),
+				procInfo->getRequests(), procInfo->getLastActiveTime() );
 	}
 };
 
@@ -76,28 +81,29 @@ void sig_int(int signo)
 int main( int argc, char * argv[] )
 {
 #ifdef LOG_PERROR
-	openlog( "testprocinet", LOG_CONS | LOG_PID | LOG_PERROR, LOG_USER );
+	openlog( "testinetserver", LOG_CONS | LOG_PID | LOG_PERROR, LOG_USER );
 #else
-	openlog( "testprocinet", LOG_CONS | LOG_PID, LOG_USER );
+	openlog( "testinetserver", LOG_CONS | LOG_PID, LOG_USER );
 #endif
 
-	setlogmask( LOG_WARNING );
+	setlogmask( LOG_UPTO( LOG_INFO ) );
 
 	printf( "This test case is similar to the <Unix Network Programming, V1, Third Ed>\n" );
 	printf( "chapter 30.9 TCP Preforked Server, Descriptor Passing\n" );
 	printf( "You can run the testinetclient to communicate with this server\n\n" );
 
-	int port = 1770;
+	int port = 1770, procCount = 10;
 
-	printf( "testprocinet listen on port [%d]\n", port );
+	printf( "testinetserver listen on port [%d]\n", port );
 
 	signal( SIGINT, sig_int );
 
 	SP_ProcInetServer server( "", port, new SP_ProcUnpServiceFactory() );
 
-	//server.setMaxProc( 10 );
-	//server.setMaxIdleProc( 5 );
-	//server.setMaxIdleProc( 1 );
+	// make a fixed number proc pool
+	server.setMaxProc( procCount );
+	server.setMaxIdleProc( procCount );
+	server.setMinIdleProc( procCount );
 
 	server.start();
 

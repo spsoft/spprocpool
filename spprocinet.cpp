@@ -45,7 +45,7 @@ public:
 	SP_ProcWorkerInetAdapter( SP_ProcInetServiceFactory * factory );
 	~SP_ProcWorkerInetAdapter();
 
-	virtual void process( const SP_ProcInfo * procInfo );
+	virtual void process( SP_ProcInfo * procInfo );
 
 private:
 	SP_ProcInetServiceFactory * mFactory;
@@ -62,13 +62,14 @@ SP_ProcWorkerInetAdapter :: ~SP_ProcWorkerInetAdapter()
 	mFactory = NULL;
 }
 
-void SP_ProcWorkerInetAdapter :: process( const SP_ProcInfo * procInfo )
+void SP_ProcWorkerInetAdapter :: process( SP_ProcInfo * procInfo )
 {
 	mFactory->workerInit( procInfo );
 
 	for( ; ; ) {
 		int fd = SP_ProcPduUtils::recv_fd( procInfo->getPipeFd() );
 		if( fd >= 0 ) {
+			procInfo->setRequests( procInfo->getRequests() + 1 );
 			SP_ProcInetService * service = mFactory->create();
 
 			service->handle( fd );
@@ -90,6 +91,7 @@ void SP_ProcWorkerInetAdapter :: process( const SP_ProcInfo * procInfo )
 		}
 	}
 
+	procInfo->setLastActiveTime( time( NULL ) );
 	mFactory->workerEnd( procInfo );
 }
 
@@ -195,6 +197,8 @@ int SP_ProcInetServer :: start()
 	if( mMaxIdleProc < mMinIdleProc ) mMaxIdleProc = mMinIdleProc;
 	if( mMaxProc <= 0 ) mMaxProc = mMaxIdleProc;
 
+	procPool->setMaxRequestsPerProc( mMaxRequestsPerProc );
+	procPool->setMaxIdleProc( mMaxIdleProc );
 	procPool->ensureIdleProc( mMinIdleProc );
 
 	SP_ProcInfoList busyList;
@@ -216,7 +220,11 @@ int SP_ProcInetServer :: start()
 
 		if( busyList.getCount() >= mMaxProc ) FD_CLR( listenfd, &rset );
 
-		int nsel = select( maxfd + 1, &rset, NULL, NULL, NULL );
+		int nsel = 0;
+
+		for( ; 0 == mIsStop && nsel <= 0; ) {
+			nsel = select( maxfd + 1, &rset, NULL, NULL, NULL );
+		}
 
 		/* check for new connections */
 		if( FD_ISSET( listenfd, &rset ) && busyList.getCount() < mMaxProc ) {
@@ -260,7 +268,9 @@ int SP_ProcInetServer :: start()
 			}
 		}
 
-		if( procPool->getIdleCount() < mMinIdleProc ) {
+		int idleCount = procPool->getIdleCount();
+		int totalCount = idleCount + busyList.getCount();
+		if( ( idleCount < mMinIdleProc ) && ( totalCount < mMaxProc ) ) {
 			procPool->ensureIdleProc( procPool->getIdleCount() + 1 );
 		}
 	}
