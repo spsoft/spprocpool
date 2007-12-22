@@ -81,21 +81,25 @@ void SP_ProcWorkerLFAdapter :: process( const SP_ProcInfo * procInfo )
 			int fd = accept( mListenfd, (struct sockaddr *)&clientAddr, &clientLen );
 			if( fd >= 0 ) {
 				assert( write( procInfo->getPipeFd(), &SP_ProcLFServer::CHAR_BUSY, 1 ) > 0 );
+
 				SP_ProcInetService * service = mFactory->create();
 				service->handle( fd );
 				close( fd );
 				delete service;
+
+				assert( write( procInfo->getPipeFd(), &SP_ProcLFServer::CHAR_IDLE, 1 ) > 0 );
 			} else {
 				syslog( LOG_WARNING, "WARN: accept fail, errno %d, %s", errno, strerror( errno ) );
 
-				assert( write( procInfo->getPipeFd(), &SP_ProcLFServer::CHAR_IDLE, 1 ) > 0 );
+				assert( write( procInfo->getPipeFd(), &SP_ProcLFServer::CHAR_EXIT, 1 ) > 0 );
 				break;
 			}
 		}
 
-		assert( write( procInfo->getPipeFd(), &SP_ProcLFServer::CHAR_IDLE, 1 ) > 0 );
-
-		if( FD_ISSET( procInfo->getPipeFd(), &rset ) ) break;
+		if( FD_ISSET( procInfo->getPipeFd(), &rset ) ) {
+			assert( write( procInfo->getPipeFd(), &SP_ProcLFServer::CHAR_EXIT, 1 ) > 0 );
+			break;
+		}
 	}
 
 	mFactory->workerEnd( procInfo );
@@ -265,6 +269,8 @@ int SP_ProcLFServer :: start()
 			SP_ProcInfo * iter = procList.getItem( i );
 
 			if( FD_ISSET( iter->getPipeFd(), &rset ) ) {
+				int isProcExit = 0;
+
 				char buff[ 128 ] = { 0 };
 				int len = recv( iter->getPipeFd(), buff, sizeof( buff ), MSG_DONTWAIT );
 				if( len > 0 ) {
@@ -272,13 +278,18 @@ int SP_ProcLFServer :: start()
 					if( CHAR_IDLE == buff[ len - 1 ] ) {
 						if( ! iter->isIdle() ) idleCount++;
 						iter->setIdle( 1 );
-					} else {
+					} else if( CHAR_BUSY == buff[ len - 1 ] ) {
 						if( iter->isIdle() ) idleCount--;
 						iter->setIdle( 0 );
+					} else {
+						isProcExit = 1;
 					}
 				} else if( 0 == len ) {
-					syslog( LOG_INFO, "INFO: proc #%u exit", iter->getPid() );
+					isProcExit = 1;
+				}
 
+				if( isProcExit ) {
+					syslog( LOG_INFO, "INFO: proc #%u exit", iter->getPid() );
 					if( iter->isIdle() ) idleCount--;
 					iter = procList.takeItem( i );
 					procPool->erase( iter );
@@ -292,7 +303,8 @@ int SP_ProcLFServer :: start()
 				SP_ProcInfo * iter = procList.getItem( i );
 				if( iter->isIdle() ) {
 					write( iter->getPipeFd(), &CHAR_EXIT, 1 );
-					syslog( LOG_INFO, "INFO: too many idle proc, force proc #%u to exit", iter->getPid() );
+					syslog( LOG_INFO, "INFO: idle.count %d, max.idle %d, force proc #%u to exit",
+						idleCount, mMaxIdleProc, iter->getPid() );
 					break;
 				}
 			}

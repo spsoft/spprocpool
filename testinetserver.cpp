@@ -95,6 +95,10 @@ int main( int argc, char * argv[] )
 
 	SP_ProcInetServer server( "", port, new SP_ProcUnpServiceFactory() );
 
+	//server.setMaxProc( 10 );
+	//server.setMaxIdleProc( 5 );
+	//server.setMaxIdleProc( 1 );
+
 	server.start();
 
 	closelog();
