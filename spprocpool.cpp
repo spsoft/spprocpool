@@ -23,6 +23,7 @@ SP_ProcInfo :: SP_ProcInfo( int pipeFd )
 
 	mRequests = 0;
 	time( &mLastActiveTime );
+	mIsIdle = 1;
 }
 
 SP_ProcInfo :: ~SP_ProcInfo()
@@ -66,6 +67,16 @@ void SP_ProcInfo :: setLastActiveTime( time_t lastActiveTime )
 time_t SP_ProcInfo :: getLastActiveTime() const
 {
 	return mLastActiveTime;
+}
+
+void SP_ProcInfo :: setIdle( int idle )
+{
+	mIsIdle = idle;
+}
+
+int SP_ProcInfo :: isIdle() const
+{
+	return mIsIdle;
 }
 
 void SP_ProcInfo :: dump() const
@@ -122,7 +133,7 @@ void SP_ProcInfoList :: append( SP_ProcInfo * info )
 	mList[ mCount++ ] = info;
 }
 
-const SP_ProcInfo * SP_ProcInfoList :: getItem( int index ) const
+SP_ProcInfo * SP_ProcInfoList :: getItem( int index ) const
 {
 	SP_ProcInfo * ret = NULL;
 
@@ -211,19 +222,33 @@ void SP_ProcPool :: setMaxIdleProc( int maxIdleProc )
 	mMaxIdleProc = maxIdleProc;
 }
 
-int SP_ProcPool :: initStartProc( int startProc )
+int SP_ProcPool :: getIdleCount()
 {
-	SP_ProcInfoList list;
-	for( int i = 0; i < startProc; i++ ) {
-		SP_ProcInfo * info = get();
-		list.append( info );
+	int count = 0;
+
+	pthread_mutex_lock( &mMutex );
+
+	count = mList->getCount();
+
+	pthread_mutex_unlock( &mMutex );
+
+	return count;
+}
+
+int SP_ProcPool :: ensureIdleProc( int idleCount )
+{
+	idleCount = idleCount > mMaxIdleProc ? mMaxIdleProc : idleCount;
+
+	for( int i = mList->getCount(); i < idleCount; i++ ) {
+		SP_ProcInfo * info = create();
+		if( NULL != info ) {
+			save( info );
+		} else {
+			break;
+		}
 	}
 
-	for( ; list.getCount() > 0; ) {
-		save( list.takeItem( 0 ) );
-	}
-
-	return 0;
+	return getIdleCount();
 }
 
 SP_ProcInfo * SP_ProcPool :: get()
@@ -245,35 +270,42 @@ SP_ProcInfo * SP_ProcPool :: get()
 
 	pthread_mutex_unlock( &mMutex );
 
-	if( NULL == ret ) {
-		int pipeFd[ 2 ] = { -1, -1 };
-		if( 0 == socketpair( AF_UNIX, SOCK_STREAM, 0, pipeFd ) ) {
-			pthread_mutex_lock( &mMutex );
-			if( 0 == SP_ProcPduUtils::send_fd( mMgrPipe, pipeFd[0] ) ) {
-				SP_ProcPdu_t pdu;
-				if( SP_ProcPduUtils::read_pdu( mMgrPipe, &pdu, NULL ) > 0 ) {
-					if( pdu.mSrcPid > 0 ) {
-						ret = new SP_ProcInfo( pipeFd[1] );
-						ret->setPid( pdu.mSrcPid );
-					} else {
-						pdu.mSrcPid = abs( pdu.mSrcPid );
-						syslog( LOG_WARNING, "WARN: cannot create process, errno %d, %s",
-								pdu.mSrcPid, strerror( pdu.mSrcPid ) );
-					}
-				}
-				if( NULL == ret ) close( pipeFd[1] );
-			} else {
-				syslog( LOG_WARNING, "WARN: send fd fail, errno %d, %s",
-						errno, strerror( errno ) );
-			}
-			close( pipeFd[0] );
-			pthread_mutex_unlock( &mMutex );
-		} else {
-			syslog( LOG_WARNING, "socketpair fail, errno %d, %s", errno, strerror( errno ) );
-		}
-	}
+	if( NULL == ret ) ret = create();
 
 	if( NULL != ret ) ret->setRequests( ret->getRequests() + 1 );
+
+	return ret;
+}
+
+SP_ProcInfo * SP_ProcPool :: create()
+{
+	SP_ProcInfo * ret = NULL;
+
+	int pipeFd[ 2 ] = { -1, -1 };
+	if( 0 == socketpair( AF_UNIX, SOCK_STREAM, 0, pipeFd ) ) {
+		pthread_mutex_lock( &mMutex );
+		if( 0 == SP_ProcPduUtils::send_fd( mMgrPipe, pipeFd[0] ) ) {
+			SP_ProcPdu_t pdu;
+			if( SP_ProcPduUtils::read_pdu( mMgrPipe, &pdu, NULL ) > 0 ) {
+				if( pdu.mSrcPid > 0 ) {
+					ret = new SP_ProcInfo( pipeFd[1] );
+					ret->setPid( pdu.mSrcPid );
+				} else {
+					pdu.mSrcPid = abs( pdu.mSrcPid );
+					syslog( LOG_WARNING, "WARN: cannot create process, errno %d, %s",
+							pdu.mSrcPid, strerror( pdu.mSrcPid ) );
+				}
+			}
+			if( NULL == ret ) close( pipeFd[1] );
+		} else {
+			syslog( LOG_WARNING, "WARN: send fd fail, errno %d, %s",
+					errno, strerror( errno ) );
+		}
+		close( pipeFd[0] );
+		pthread_mutex_unlock( &mMutex );
+	} else {
+		syslog( LOG_WARNING, "socketpair fail, errno %d, %s", errno, strerror( errno ) );
+	}
 
 	return ret;
 }

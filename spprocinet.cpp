@@ -30,6 +30,14 @@ SP_ProcInetServiceFactory :: ~SP_ProcInetServiceFactory()
 {
 }
 
+void SP_ProcInetServiceFactory :: workerInit( const SP_ProcInfo * procInfo )
+{
+}
+
+void SP_ProcInetServiceFactory :: workerEnd( const SP_ProcInfo * procInfo )
+{
+}
+
 //-------------------------------------------------------------------
 
 class SP_ProcWorkerInetAdapter : public SP_ProcWorker {
@@ -56,6 +64,8 @@ SP_ProcWorkerInetAdapter :: ~SP_ProcWorkerInetAdapter()
 
 void SP_ProcWorkerInetAdapter :: process( const SP_ProcInfo * procInfo )
 {
+	mFactory->workerInit( procInfo );
+
 	for( ; ; ) {
 		int fd = SP_ProcPduUtils::recv_fd( procInfo->getPipeFd() );
 		if( fd >= 0 ) {
@@ -79,6 +89,8 @@ void SP_ProcWorkerInetAdapter :: process( const SP_ProcInfo * procInfo )
 			break;
 		}
 	}
+
+	mFactory->workerEnd( procInfo );
 }
 
 //-------------------------------------------------------------------
@@ -122,27 +134,19 @@ SP_ProcInetServer :: SP_ProcInetServer( const char * bindIP, int port,
 
 	mPort = port;
 
-	mManager = new SP_ProcManager( new SP_ProcWorkerFactoryInetAdapter( factory ) );
-	mManager->start();
+	mFactory = factory;
 
-	mPool = mManager->getProcPool();
+	mMaxProc = 64;
+	mMaxIdleProc = 5;
+	mMinIdleProc = 1;
 
-	mBusyList = new SP_ProcInfoList();
-
-	mMaxProc = 128;
+	mMaxRequestsPerProc = 0;
 
 	mIsStop = 1;
 }
 
 SP_ProcInetServer :: ~SP_ProcInetServer()
 {
-	mPool->dump();
-
-	delete mManager;
-	mManager = NULL;
-
-	delete mBusyList;
-	mBusyList = NULL;
 }
 
 void SP_ProcInetServer :: setMaxProc( int maxProc )
@@ -150,9 +154,19 @@ void SP_ProcInetServer :: setMaxProc( int maxProc )
 	mMaxProc = maxProc;
 }
 
-SP_ProcPool * SP_ProcInetServer :: getProcPool()
+void SP_ProcInetServer :: setMaxRequestsPerProc( int maxRequestsPerProc )
 {
-	return mPool;
+	mMaxRequestsPerProc = maxRequestsPerProc;
+}
+
+void SP_ProcInetServer :: setMaxIdleProc( int maxIdleProc )
+{
+	mMaxIdleProc = maxIdleProc;
+}
+
+void SP_ProcInetServer :: setMinIdleProc( int minIdleProc )
+{
+	mMinIdleProc = minIdleProc;
 }
 
 void SP_ProcInetServer :: shutdown()
@@ -171,9 +185,19 @@ int SP_ProcInetServer :: start()
 	signal( SIGPIPE, SIG_IGN );
 
 	int listenfd = -1;
-	int ret = SP_ProcPduUtils::tcp_listen( mBindIP, mPort, &listenfd );
+	assert( 0 == SP_ProcPduUtils::tcp_listen( mBindIP, mPort, &listenfd ) );
 
-	if( 0 != ret ) return -1;
+	SP_ProcManager procManager( new SP_ProcWorkerFactoryInetAdapter( mFactory ) );
+	procManager.start();
+	SP_ProcPool * procPool = procManager.getProcPool();
+
+	if( mMinIdleProc <= 0 ) mMinIdleProc = 1;
+	if( mMaxIdleProc < mMinIdleProc ) mMaxIdleProc = mMinIdleProc;
+	if( mMaxProc <= 0 ) mMaxProc = mMaxIdleProc;
+
+	procPool->ensureIdleProc( mMinIdleProc );
+
+	SP_ProcInfoList busyList;
 
 	mIsStop = 0;
 
@@ -184,19 +208,19 @@ int SP_ProcInetServer :: start()
 		FD_SET( listenfd, &rset );
 		int maxfd = listenfd;
 
-		for( int i = 0; i < mBusyList->getCount(); i++ ) {
-			const SP_ProcInfo * iter = mBusyList->getItem( i );
+		for( int i = 0; i < busyList.getCount(); i++ ) {
+			const SP_ProcInfo * iter = busyList.getItem( i );
 			FD_SET( iter->getPipeFd(), &rset );
 			maxfd = maxfd > iter->getPipeFd() ? maxfd : iter->getPipeFd();
 		}
 
-		if( mBusyList->getCount() >= mMaxProc ) FD_CLR( listenfd, &rset );
+		if( busyList.getCount() >= mMaxProc ) FD_CLR( listenfd, &rset );
 
 		int nsel = select( maxfd + 1, &rset, NULL, NULL, NULL );
 
 		/* check for new connections */
-		if( FD_ISSET( listenfd, &rset ) && mBusyList->getCount() < mMaxProc ) {
-			SP_ProcInfo * info = mPool->get();
+		if( FD_ISSET( listenfd, &rset ) && busyList.getCount() < mMaxProc ) {
+			SP_ProcInfo * info = procPool->get();
 
 			if( NULL != info ) {
 				struct sockaddr_in clientAddr;
@@ -205,13 +229,13 @@ int SP_ProcInetServer :: start()
 
 				if( clientFd >= 0 ) {
 					if( 0 == SP_ProcPduUtils::send_fd( info->getPipeFd(), clientFd ) ) {
-						mBusyList->append( info );
+						busyList.append( info );
 					} else {
-						mPool->erase( info );
+						procPool->erase( info );
 					}
 					close( clientFd );
 				} else {
-					mPool->save( info );
+					procPool->save( info );
 				}
 			}
 
@@ -219,59 +243,30 @@ int SP_ProcInetServer :: start()
 		}
 
 		/* find any newly-available children */
-		for( int i = mBusyList->getCount() - 1; i >= 0; i-- ) {
-			const SP_ProcInfo * iter = mBusyList->getItem( i );
+		for( int i = busyList.getCount() - 1; i >= 0; i-- ) {
+			const SP_ProcInfo * iter = busyList.getItem( i );
 			if( FD_ISSET( iter->getPipeFd(), &rset ) ) {
-				SP_ProcInfo * info = mBusyList->takeItem( i );
+				SP_ProcInfo * info = busyList.takeItem( i );
 
 				SP_ProcPdu_t pdu;
 				if( SP_ProcPduUtils::read_pdu( iter->getPipeFd(), &pdu, NULL ) > 0 ) {
 					assert( info->getPid() == pdu.mSrcPid );
-					mPool->save( info );
+					procPool->save( info );
 				} else {
-					mPool->erase( info );
+					procPool->erase( info );
 				}
 
 				if (--nsel == 0) break;	/* all done with select() results */
 			}
+		}
+
+		if( procPool->getIdleCount() < mMinIdleProc ) {
+			procPool->ensureIdleProc( procPool->getIdleCount() + 1 );
 		}
 	}
 
 	close( listenfd );
 
 	return 0;
-}
-
-void * SP_ProcInetServer :: acceptThread( void * arg )
-{
-	((SP_ProcInetServer*)arg)->start();
-
-	return NULL;
-}
-
-int SP_ProcInetServer :: run()
-{
-	pthread_attr_t attr;
-	pthread_attr_init( &attr );
-	assert( pthread_attr_setstacksize( &attr, 1024 * 1024 ) == 0 );
-	pthread_attr_setdetachstate( &attr, PTHREAD_CREATE_DETACHED );
-
-	pthread_t thread = 0;
-	int ret = pthread_create( &thread, &attr, reinterpret_cast<void*(*)(void*)>(acceptThread), this );
-	pthread_attr_destroy( &attr );
-	if( 0 == ret ) {
-		syslog( LOG_NOTICE, "Thread #%ld has been created to listen on port [%d]", thread, mPort );
-	} else {
-		syslog( LOG_WARNING, "Unable to create a thread for TCP server on port [%d], %s",
-			mPort, strerror( errno ) ) ;
-		ret = -1;
-	}
-
-	return ret;
-}
-
-void SP_ProcInetServer :: runForever()
-{
-	acceptThread( this );
 }
 

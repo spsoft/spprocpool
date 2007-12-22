@@ -26,6 +26,9 @@ public:
 	void setLastActiveTime( time_t lastActiveTime );
 	time_t getLastActiveTime() const;
 
+	void setIdle( int idle );
+	int isIdle() const;
+
 	void dump() const;
 
 private:
@@ -34,6 +37,7 @@ private:
 
 	int mRequests;
 	time_t mLastActiveTime;
+	char mIsIdle;
 };
 
 class SP_ProcInfoList {
@@ -44,7 +48,7 @@ public:
 	int getCount() const;
 
 	void append( SP_ProcInfo * info );
-	const SP_ProcInfo * getItem( int index ) const;
+	SP_ProcInfo * getItem( int index ) const;
 	SP_ProcInfo * takeItem( int index );
 
 	int findByPid( pid_t pid ) const;
@@ -70,8 +74,9 @@ public:
 	// default is 0, unlimited
 	void setMaxIdleProc( int maxIdleProc );
 
-	// default is 0, no start proc
-	int initStartProc( int startProc );
+	int ensureIdleProc( int idleCount );
+
+	int getIdleCount();
 
 	SP_ProcInfo * get();
 
@@ -82,6 +87,9 @@ public:
 	void dump() const;
 
 private:
+
+	SP_ProcInfo * create();
+
 	// pipes to communicate between process manager and app
 	int mMgrPipe;
 
