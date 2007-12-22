@@ -57,6 +57,13 @@ public:
 	virtual SP_ProcInetService * create() const {
 		return new SP_ProcUnpService();
 	}
+
+	virtual void workerInit( const SP_ProcInfo * procInfo ) {
+		signal( SIGINT, SIG_DFL );
+	}
+
+	virtual void workerEnd( const SP_ProcInfo * procInfo ) {
+	}
 };
 
 void sig_int(int signo)
@@ -84,17 +91,11 @@ int main( int argc, char * argv[] )
 
 	printf( "testprocinet listen on port [%d]\n", port );
 
-	SP_ProcInetServer server( "", port, new SP_ProcUnpServiceFactory() );
-
 	signal( SIGINT, sig_int );
 
-	server.runForever();
+	SP_ProcInetServer server( "", port, new SP_ProcUnpServiceFactory() );
 
-	//server.run();
-	//sleep( 5 );
-	//for( ; 0 == server.isStop(); ) {
-		//pause();
-	//}
+	server.start();
 
 	closelog();
 

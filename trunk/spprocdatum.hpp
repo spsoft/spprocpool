@@ -14,6 +14,7 @@ class SP_ProcPool;
 class SP_ProcManager;
 class SP_ProcDatumServiceFactory;
 class SP_ProcDataBlock;
+class SP_ProcInfo;
 
 class SP_ProcDatumHandler {
 public:
@@ -73,6 +74,10 @@ public:
 	virtual ~SP_ProcDatumServiceFactory();
 
 	virtual SP_ProcDatumService * create() const = 0;
+
+	virtual void workerInit( const SP_ProcInfo * procInfo );
+
+	virtual void workerEnd( const SP_ProcInfo * procInfo );
 };
 
 #endif

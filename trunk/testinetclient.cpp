@@ -100,7 +100,7 @@ int main(int argc, char **argv)
 					lt10ms++;
 				}
 			}
-			printf("child %d done, time %d, %d ( > 10ms ), %d ( <= 10 ), conn.fail %d\n",
+			printf("child %d done, time %ld, %d ( > 10ms ), %d ( <= 10 ), conn.fail %d\n",
 				i, clock.getAge(), gt10ms, lt10ms, connFail );
 			exit(0);
 		}

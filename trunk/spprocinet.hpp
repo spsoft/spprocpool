@@ -9,6 +9,7 @@
 class SP_ProcManager;
 class SP_ProcPool;
 class SP_ProcInfoList;
+class SP_ProcInfo;
 
 class SP_ProcInetService {
 public:
@@ -22,6 +23,10 @@ public:
 	virtual ~SP_ProcInetServiceFactory();
 
 	virtual SP_ProcInetService * create() const = 0;
+
+	virtual void workerInit( const SP_ProcInfo * procInfo );
+
+	virtual void workerEnd( const SP_ProcInfo * procInfo );
 };
 
 class SP_ProcInetServer {
@@ -30,37 +35,29 @@ public:
 			SP_ProcInetServiceFactory * factory );
 	~SP_ProcInetServer();
 
-	// default is 128
+	// default is 
 	void setMaxProc( int maxProc );
 
-	SP_ProcPool * getProcPool();
+	void setMaxRequestsPerProc( int maxRequestsPerProc );
+
+	void setMaxIdleProc( int maxIdleProc );
+
+	void setMinIdleProc( int minIdleProc );
+
+	int start();
 
 	int isStop();
 
 	void shutdown();
 
-	int run();
-	void runForever();
-
 private:
 	char mBindIP[ 64 ];
 	int mPort;
 
-	// manager side
-	SP_ProcManager * mManager;
-
-	// app side
-	SP_ProcPool * mPool;
-
-	SP_ProcInfoList * mBusyList;
+	SP_ProcInetServiceFactory * mFactory;
 
 	int mIsStop;
-
-	int mMaxProc;
-
-	static void * acceptThread( void * arg );
-
-	int start();
+	int mMaxProc, mMaxRequestsPerProc, mMaxIdleProc, mMinIdleProc;
 };
 
 #endif

@@ -34,32 +34,40 @@ SP_ProcDatumServiceFactory :: ~SP_ProcDatumServiceFactory()
 {
 }
 
+void SP_ProcDatumServiceFactory :: workerInit( const SP_ProcInfo * procInfo )
+{
+}
+
+void SP_ProcDatumServiceFactory :: workerEnd( const SP_ProcInfo * procInfo )
+{
+}
+
 //-------------------------------------------------------------------
 
 class SP_ProcWorkerDatumAdapter : public SP_ProcWorker {
 public:
-	SP_ProcWorkerDatumAdapter( SP_ProcDatumService * service );
+	SP_ProcWorkerDatumAdapter( SP_ProcDatumServiceFactory * factory );
 	virtual ~SP_ProcWorkerDatumAdapter();
 
 	virtual void process( const SP_ProcInfo * procInfo );
 
 private:
-	SP_ProcDatumService * mService;
+	SP_ProcDatumServiceFactory * mFactory;
 };
 
-SP_ProcWorkerDatumAdapter :: SP_ProcWorkerDatumAdapter( SP_ProcDatumService * service )
+SP_ProcWorkerDatumAdapter :: SP_ProcWorkerDatumAdapter( SP_ProcDatumServiceFactory * factory )
 {
-	mService = service;
+	mFactory = factory;
 }
 
 SP_ProcWorkerDatumAdapter :: ~SP_ProcWorkerDatumAdapter()
 {
-	delete mService;
-	mService = NULL;
 }
 
 void SP_ProcWorkerDatumAdapter :: process( const SP_ProcInfo * procInfo )
 {
+	mFactory->workerInit( procInfo );
+
 	for( ; ; ) {
 		SP_ProcDataBlock request;
 		SP_ProcPdu_t pdu;
@@ -68,7 +76,9 @@ void SP_ProcWorkerDatumAdapter :: process( const SP_ProcInfo * procInfo )
 		if( SP_ProcPduUtils::read_pdu( procInfo->getPipeFd(), &pdu, &request ) > 0 ) {
 			SP_ProcDataBlock reply;
 
-			mService->handle( &request, &reply );
+			SP_ProcDatumService * service = mFactory->create();
+			service->handle( &request, &reply );
+			delete service;
 
 			SP_ProcPdu_t replyPdu;
 			memset( &replyPdu, 0, sizeof( SP_ProcPdu_t ) );
@@ -84,6 +94,8 @@ void SP_ProcWorkerDatumAdapter :: process( const SP_ProcInfo * procInfo )
 			break;
 		}
 	}
+
+	mFactory->workerEnd( procInfo );
 }
 
 //-------------------------------------------------------------------
@@ -113,7 +125,7 @@ SP_ProcWorkerFactoryDatumAdapter :: ~SP_ProcWorkerFactoryDatumAdapter()
 
 SP_ProcWorker * SP_ProcWorkerFactoryDatumAdapter :: create() const
 {
-	return new SP_ProcWorkerDatumAdapter( mFactory->create() );
+	return new SP_ProcWorkerDatumAdapter( mFactory );
 }
 
 //-------------------------------------------------------------------

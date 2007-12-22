@@ -9,6 +9,8 @@
 #include <errno.h>
 #include <signal.h>
 #include <unistd.h>
+#include <signal.h>
+#include <stdio.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -26,7 +28,6 @@ public:
 	~SP_ProcWorkerLFAdapter();
 
 	void setMaxRequestsPerProc( int maxRequestsPerProc );
-	void setMaxIdleTimeout( int maxIdleTimeout );
 
 	virtual void process( const SP_ProcInfo * procInfo );
 
@@ -34,7 +35,7 @@ private:
 	int mListenfd;
 	SP_ProcInetServiceFactory * mFactory;
 
-	int mMaxRequestsPerProc, mMaxIdleTimeout;
+	int mMaxRequestsPerProc;
 };
 
 SP_ProcWorkerLFAdapter :: SP_ProcWorkerLFAdapter( int listenfd, SP_ProcInetServiceFactory * factory )
@@ -43,7 +44,6 @@ SP_ProcWorkerLFAdapter :: SP_ProcWorkerLFAdapter( int listenfd, SP_ProcInetServi
 	mFactory = factory;
 
 	mMaxRequestsPerProc = 0;
-	mMaxIdleTimeout = 0;
 }
 
 SP_ProcWorkerLFAdapter :: ~SP_ProcWorkerLFAdapter()
@@ -57,33 +57,48 @@ void SP_ProcWorkerLFAdapter :: setMaxRequestsPerProc( int maxRequestsPerProc )
 	mMaxRequestsPerProc = maxRequestsPerProc;
 }
 
-void SP_ProcWorkerLFAdapter :: setMaxIdleTimeout( int maxIdleTimeout )
-{
-	mMaxIdleTimeout = maxIdleTimeout;
-}
-
 void SP_ProcWorkerLFAdapter :: process( const SP_ProcInfo * procInfo )
 {
+	mFactory->workerInit( procInfo );
+
+	fd_set masterset;
+
+	FD_ZERO( &masterset );
+	FD_SET( mListenfd, &masterset );
+	FD_SET( procInfo->getPipeFd(), &masterset );
+
+	int maxfd = mListenfd > procInfo->getPipeFd() ? mListenfd : procInfo->getPipeFd();
+
 	for( int i = 0; ( 0 == mMaxRequestsPerProc )
-			|| ( mMaxRequestsPerProc > 0 && i >= mMaxRequestsPerProc ); i++ ) {
+			|| ( mMaxRequestsPerProc > 0 && i <=  mMaxRequestsPerProc ); i++ ) {
 
-		struct sockaddr_in clientAddr;
-		socklen_t clientLen = sizeof( clientAddr );
-		int fd = accept( mListenfd, (struct sockaddr *)&clientAddr, &clientLen );
+		fd_set rset = masterset;
+		select( maxfd + 1, &rset, NULL, NULL, NULL );
 
-		if( fd >= 0 ) {
+		if( FD_ISSET( mListenfd, &rset ) ) {
+			struct sockaddr_in clientAddr;
+			socklen_t clientLen = sizeof( clientAddr );
+			int fd = accept( mListenfd, (struct sockaddr *)&clientAddr, &clientLen );
+			if( fd >= 0 ) {
+				assert( write( procInfo->getPipeFd(), &SP_ProcLFServer::CHAR_BUSY, 1 ) > 0 );
+				SP_ProcInetService * service = mFactory->create();
+				service->handle( fd );
+				close( fd );
+				delete service;
+			} else {
+				syslog( LOG_WARNING, "WARN: accept fail, errno %d, %s", errno, strerror( errno ) );
 
-			SP_ProcInetService * service = mFactory->create();
-
-			service->handle( fd );
-			close( fd );
-
-			delete service;
-
-		} else {
-			syslog( LOG_WARNING, "WARN: accept fail, errno %d, %s", errno, strerror( errno ) );
+				assert( write( procInfo->getPipeFd(), &SP_ProcLFServer::CHAR_IDLE, 1 ) > 0 );
+				break;
+			}
 		}
+
+		assert( write( procInfo->getPipeFd(), &SP_ProcLFServer::CHAR_IDLE, 1 ) > 0 );
+
+		if( FD_ISSET( procInfo->getPipeFd(), &rset ) ) break;
 	}
+
+	mFactory->workerEnd( procInfo );
 }
 
 //-------------------------------------------------------------------
@@ -94,7 +109,6 @@ public:
 	virtual ~SP_ProcWorkerFactoryLFAdapter();
 
 	void setMaxRequestsPerProc( int maxRequestsPerProc );
-	void setMaxIdleTimeout( int maxIdleTimeout );
 
 	virtual SP_ProcWorker * create() const;
 
@@ -102,7 +116,7 @@ private:
 	int mListenfd;
 	SP_ProcInetServiceFactory * mFactory;
 
-	int mMaxRequestsPerProc, mMaxIdleTimeout;
+	int mMaxRequestsPerProc;
 };
 
 SP_ProcWorkerFactoryLFAdapter :: SP_ProcWorkerFactoryLFAdapter(
@@ -112,7 +126,6 @@ SP_ProcWorkerFactoryLFAdapter :: SP_ProcWorkerFactoryLFAdapter(
 	mFactory = factory;
 
 	mMaxRequestsPerProc = 0;
-	mMaxIdleTimeout = 0;
 }
 
 SP_ProcWorkerFactoryLFAdapter :: ~SP_ProcWorkerFactoryLFAdapter()
@@ -126,46 +139,41 @@ void SP_ProcWorkerFactoryLFAdapter :: setMaxRequestsPerProc( int maxRequestsPerP
 	mMaxRequestsPerProc = maxRequestsPerProc;
 }
 
-void SP_ProcWorkerFactoryLFAdapter :: setMaxIdleTimeout( int maxIdleTimeout )
-{
-	mMaxIdleTimeout = maxIdleTimeout;
-}
-
 SP_ProcWorker * SP_ProcWorkerFactoryLFAdapter :: create() const
 {
-	return new SP_ProcWorkerLFAdapter( mListenfd, mFactory );
+	SP_ProcWorkerLFAdapter * worker = new SP_ProcWorkerLFAdapter( mListenfd, mFactory );
+	worker->setMaxRequestsPerProc( mMaxRequestsPerProc );
+
+	return worker;
 }
 
 //-------------------------------------------------------------------
+
+const char SP_ProcLFServer :: CHAR_BUSY = 'B';
+const char SP_ProcLFServer :: CHAR_IDLE = 'I';
+const char SP_ProcLFServer :: CHAR_EXIT = '!';
 
 SP_ProcLFServer :: SP_ProcLFServer( const char * bindIP, int port,
 		SP_ProcInetServiceFactory * factory )
 {
 	strncpy( mBindIP, bindIP, sizeof( mBindIP ) );
 	mBindIP[ sizeof( mBindIP ) - 1 ] = '\0';
-	mFactory = factory;
 
 	mPort = port;
 
-	mManager = NULL;
-	mProcList = NULL;
+	mFactory = factory;
 
-	mPool = new SP_ProcPool( -1 );
+	mMaxProc = 64;
+	mMaxIdleProc = 5;
+	mMinIdleProc = 1;
 
-	mMaxProc = 128;
+	mMaxRequestsPerProc = 0;
 
 	mIsStop = 1;
 }
 
 SP_ProcLFServer :: ~SP_ProcLFServer()
 {
-	if( NULL != mPool ) mPool->dump();
-
-	if( NULL != mManager ) delete mManager;
-	mManager = NULL;
-
-	if( NULL != mProcList ) delete mProcList;
-	mProcList = NULL;
 }
 
 void SP_ProcLFServer :: setMaxProc( int maxProc )
@@ -173,9 +181,19 @@ void SP_ProcLFServer :: setMaxProc( int maxProc )
 	mMaxProc = maxProc;
 }
 
-SP_ProcPool * SP_ProcLFServer :: getProcPool()
+void SP_ProcLFServer :: setMaxRequestsPerProc( int maxRequestsPerProc )
 {
-	return mPool;
+	mMaxRequestsPerProc = maxRequestsPerProc;
+}
+
+void SP_ProcLFServer :: setMaxIdleProc( int maxIdleProc )
+{
+	mMaxIdleProc = maxIdleProc;
+}
+
+void SP_ProcLFServer :: setMinIdleProc( int minIdleProc )
+{
+	mMinIdleProc = minIdleProc;
 }
 
 int SP_ProcLFServer :: isStop()
@@ -186,39 +204,6 @@ int SP_ProcLFServer :: isStop()
 void SP_ProcLFServer :: shutdown()
 {
 	mIsStop = 1;
-}
-
-int SP_ProcLFServer :: run()
-{
-	pthread_attr_t attr;
-	pthread_attr_init( &attr );
-	assert( pthread_attr_setstacksize( &attr, 1024 * 1024 ) == 0 );
-	pthread_attr_setdetachstate( &attr, PTHREAD_CREATE_DETACHED );
-
-	pthread_t thread = 0;
-	int ret = pthread_create( &thread, &attr, reinterpret_cast<void*(*)(void*)>(monitorThread), this );
-	pthread_attr_destroy( &attr );
-	if( 0 == ret ) {
-		syslog( LOG_NOTICE, "Thread #%ld has been created to monitor on port [%d]", thread, mPort );
-	} else {
-		syslog( LOG_WARNING, "Unable to create a thread for TCP server on port [%d], %s",
-			mPort, strerror( errno ) ) ;
-		ret = -1;
-	}
-
-	return ret;
-}
-
-void SP_ProcLFServer :: runForever()
-{
-	monitorThread( this );
-}
-
-void * SP_ProcLFServer :: monitorThread( void * arg )
-{
-	((SP_ProcLFServer*)arg)->start();
-
-	return NULL;
 }
 
 int SP_ProcLFServer :: start()
@@ -232,27 +217,32 @@ int SP_ProcLFServer :: start()
 
 	SP_ProcWorkerFactoryLFAdapter * factory =
 			new SP_ProcWorkerFactoryLFAdapter( listenfd, mFactory );
-	factory->setMaxRequestsPerProc( mPool->getMaxRequestsPerProc() );
+	factory->setMaxRequestsPerProc( mMaxRequestsPerProc );
 
-	mManager = new SP_ProcManager( factory );
-	mManager->start();
-
-	delete mPool;
-	mPool = mManager->getProcPool();
-	mProcList = new SP_ProcInfoList();
+	SP_ProcManager procManager( factory );
+	procManager.start();
+	SP_ProcPool * procPool = procManager.getProcPool();
 
 	close( listenfd );
 
-	for( int i = 0; i < mMaxProc; i++ ) {
-		SP_ProcInfo * info = mPool->get();
+	if( mMinIdleProc <= 0 ) mMinIdleProc = 1;
+	if( mMaxIdleProc < mMinIdleProc ) mMaxIdleProc = mMinIdleProc;
+	if( mMaxProc <= 0 ) mMaxProc = mMaxIdleProc;
+
+	SP_ProcInfoList procList;
+
+	for( int i = 0; i < mMinIdleProc; i++ ) {
+		SP_ProcInfo * info = procPool->get();
 		if( NULL != info ) {
-			mProcList->append( info );
+			procList.append( info );
 		} else {
-			syslog( LOG_WARNING, "WARN: Create proc fail, only %d proc service",
-					mProcList->getCount() );
+			syslog( LOG_WARNING, "WARN: Create proc fail, only %d idle proc",
+					procList.getCount() );
 			break;
 		}
 	}
+
+	int idleCount = procList.getCount();
 
 	mIsStop = 0;
 
@@ -262,34 +252,59 @@ int SP_ProcLFServer :: start()
 
 		int maxfd = 0;
 
-		for( int i = 0; i < mProcList->getCount(); i++ ) {
-			const SP_ProcInfo * iter = mProcList->getItem( i );
+		for( int i = 0; i < procList.getCount(); i++ ) {
+			const SP_ProcInfo * iter = procList.getItem( i );
 			FD_SET( iter->getPipeFd(), &rset );
 			maxfd = maxfd > iter->getPipeFd() ? maxfd : iter->getPipeFd();
 		}
 
 		int nsel = select( maxfd + 1, &rset, NULL, NULL, NULL );
 
-		/* find any exception children */
-		for( int i = mProcList->getCount() - 1; i >= 0; i-- ) {
-			const SP_ProcInfo * iter = mProcList->getItem( i );
+		/* find out the child is busy/idle/exit */
+		for( int i = procList.getCount() - 1; i >= 0; i-- ) {
+			SP_ProcInfo * iter = procList.getItem( i );
+
 			if( FD_ISSET( iter->getPipeFd(), &rset ) ) {
-				syslog( LOG_WARNING, "WARN: proc #%u dead", iter->getPid() );
+				char buff[ 128 ] = { 0 };
+				int len = recv( iter->getPipeFd(), buff, sizeof( buff ), MSG_DONTWAIT );
+				if( len > 0 ) {
+					iter->setRequests( iter->getRequests() + len );
+					if( CHAR_IDLE == buff[ len - 1 ] ) {
+						if( ! iter->isIdle() ) idleCount++;
+						iter->setIdle( 1 );
+					} else {
+						if( iter->isIdle() ) idleCount--;
+						iter->setIdle( 0 );
+					}
+				} else if( 0 == len ) {
+					syslog( LOG_INFO, "INFO: proc #%u exit", iter->getPid() );
 
-				SP_ProcInfo * info = mProcList->takeItem( i );
-				mPool->erase( info );
-
+					if( iter->isIdle() ) idleCount--;
+					iter = procList.takeItem( i );
+					procPool->erase( iter );
+				}
 				if (--nsel == 0) break;	/* all done with select() results */
 			}
 		}
 
-		for( int i = mProcList->getCount(); i < mMaxProc; i++ ) {
-			SP_ProcInfo * info = mPool->get();
+		if( idleCount > mMaxIdleProc ) {
+			for( int i = 0; i < procList.getCount(); i++ ) {
+				SP_ProcInfo * iter = procList.getItem( i );
+				if( iter->isIdle() ) {
+					write( iter->getPipeFd(), &CHAR_EXIT, 1 );
+					syslog( LOG_INFO, "INFO: too many idle proc, force proc #%u to exit", iter->getPid() );
+					break;
+				}
+			}
+		}
+
+		if( idleCount < mMinIdleProc && procList.getCount() < mMaxProc ) {
+			SP_ProcInfo * info = procPool->get();
 			if( NULL != info ) {
-				mProcList->append( info );
+				idleCount++;
+				procList.append( info );
 			} else {
-				syslog( LOG_WARNING, "WARN: Create proc fail, only %d proc service",
-						mProcList->getCount() );
+				syslog( LOG_WARNING, "WARN: Create proc fail, only %d idle proc", idleCount );
 				break;
 			}
 		}

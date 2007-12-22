@@ -58,6 +58,13 @@ public:
 	virtual SP_ProcInetService * create() const {
 		return new SP_ProcUnpService();
 	}
+
+	virtual void workerInit( const SP_ProcInfo * procInfo ) {
+		signal( SIGINT, SIG_DFL );
+	}
+
+	virtual void workerEnd( const SP_ProcInfo * procInfo ) {
+	}
 };
 
 void sig_int(int signo)
@@ -75,7 +82,7 @@ int main( int argc, char * argv[] )
 	openlog( "testproclfsvr", LOG_CONS | LOG_PID, LOG_USER );
 #endif
 
-	setlogmask( LOG_WARNING );
+	//setlogmask( LOG_WARNING );
 
 	printf( "This test case is similar to the <Unix Network Programming, V1, Third Ed>\n" );
 	printf( "chapter 30.6 TCP Preforked Server, No Locking Around accept\n" );
@@ -85,19 +92,14 @@ int main( int argc, char * argv[] )
 
 	printf( "testproclfsvr listen on port [%d]\n", port );
 
+	signal( SIGINT, sig_int );
+
 	SP_ProcLFServer server( "", port, new SP_ProcUnpServiceFactory() );
 
 	server.setMaxProc( 10 );
+	//server.setMaxRequestsPerProc( 10 );
 
-	signal( SIGINT, sig_int );
-
-	server.runForever();
-
-	//server.run();
-	//sleep( 5 );
-	//for( ; 0 == server.isStop(); ) {
-		//pause();
-	//}
+	server.start();
 
 	closelog();
 

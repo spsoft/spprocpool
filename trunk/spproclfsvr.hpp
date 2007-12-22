@@ -13,42 +13,40 @@ class SP_ProcInfoList;
 
 class SP_ProcLFServer {
 public:
+	static const char CHAR_BUSY;
+	static const char CHAR_IDLE;
+	static const char CHAR_EXIT;
+
 	SP_ProcLFServer( const char * bindIP, int port,
 			SP_ProcInetServiceFactory * factory );
 	~SP_ProcLFServer();
 
-	// default is 128
+	// default is 64
 	void setMaxProc( int maxProc );
 
-	SP_ProcPool * getProcPool();
+	// default is 0, unlimited
+	void setMaxRequestsPerProc( int maxRequestsPerProc );
+
+	// default is 5
+	void setMaxIdleProc( int maxIdleProc );
+
+	// default is 1
+	void setMinIdleProc( int minIdleProc );
+
+	int start();
 
 	int isStop();
 
 	void shutdown();
 
-	int run();
-	void runForever();
-
 private:
 	char mBindIP[ 64 ];
 	int mPort;
 
-	// manager side
-	SP_ProcManager * mManager;
 	SP_ProcInetServiceFactory * mFactory;
 
-	// app side
-	SP_ProcPool * mPool;
-
-	SP_ProcInfoList * mProcList;
-
 	int mIsStop;
-
-	int mMaxProc;
-
-	static void * monitorThread( void * arg );
-
-	int start();
+	int mMaxProc, mMaxRequestsPerProc, mMaxIdleProc, mMinIdleProc;
 };
 
 #endif
