@@ -25,7 +25,7 @@
 
 class SP_ProcWorkerLFAdapter : public SP_ProcWorker {
 public:
-	SP_ProcWorkerLFAdapter( int listenfd, SP_ProcInetServiceFactory * factory );
+	SP_ProcWorkerLFAdapter( int listenfd, int podfd, SP_ProcInetServiceFactory * factory );
 	~SP_ProcWorkerLFAdapter();
 
 	void setMaxRequestsPerProc( int maxRequestsPerProc );
@@ -33,15 +33,16 @@ public:
 	virtual void process( SP_ProcInfo * procInfo );
 
 private:
-	int mListenfd;
+	int mListenfd, mPodfd;
 	SP_ProcInetServiceFactory * mFactory;
 
 	int mMaxRequestsPerProc;
 };
 
-SP_ProcWorkerLFAdapter :: SP_ProcWorkerLFAdapter( int listenfd, SP_ProcInetServiceFactory * factory )
+SP_ProcWorkerLFAdapter :: SP_ProcWorkerLFAdapter( int listenfd, int podfd, SP_ProcInetServiceFactory * factory )
 {
 	mListenfd = listenfd;
+	mPodfd = podfd;
 	mFactory = factory;
 
 	mMaxRequestsPerProc = 0;
@@ -61,6 +62,12 @@ void SP_ProcWorkerLFAdapter :: setMaxRequestsPerProc( int maxRequestsPerProc )
 void SP_ProcWorkerLFAdapter :: process( SP_ProcInfo * procInfo )
 {
 	mFactory->workerInit( procInfo );
+
+	int flags = fcntl( mPodfd, F_GETFL, 0 );
+	if( flags >= 0 ) {
+		flags |= O_NONBLOCK;
+		fcntl( mPodfd, F_SETFL, flags );
+	}
 
 	for( ; ( 0 == mMaxRequestsPerProc )
 			|| ( mMaxRequestsPerProc > 0 && procInfo->getRequests() <= mMaxRequestsPerProc ); ) {
@@ -91,7 +98,7 @@ void SP_ProcWorkerLFAdapter :: process( SP_ProcInfo * procInfo )
 		}
 
 		char pod = 0;
-		if( recv( procInfo->getPipeFd(), &pod, 1, MSG_DONTWAIT ) > 0 ) {
+		if( read( mPodfd, &pod, 1 ) > 0 ) {
 			assert( write( procInfo->getPipeFd(), &SP_ProcLFServer::CHAR_EXIT, 1 ) > 0 );
 			break;
 		}
@@ -106,7 +113,7 @@ void SP_ProcWorkerLFAdapter :: process( SP_ProcInfo * procInfo )
 
 class SP_ProcWorkerFactoryLFAdapter : public SP_ProcWorkerFactory {
 public:
-	SP_ProcWorkerFactoryLFAdapter( int listenfd, SP_ProcInetServiceFactory * factory );
+	SP_ProcWorkerFactoryLFAdapter( int listenfd, int podfd, SP_ProcInetServiceFactory * factory );
 	virtual ~SP_ProcWorkerFactoryLFAdapter();
 
 	void setMaxRequestsPerProc( int maxRequestsPerProc );
@@ -114,16 +121,17 @@ public:
 	virtual SP_ProcWorker * create() const;
 
 private:
-	int mListenfd;
+	int mListenfd, mPodfd;
 	SP_ProcInetServiceFactory * mFactory;
 
 	int mMaxRequestsPerProc;
 };
 
 SP_ProcWorkerFactoryLFAdapter :: SP_ProcWorkerFactoryLFAdapter(
-		int listenfd, SP_ProcInetServiceFactory * factory )
+		int listenfd, int podfd, SP_ProcInetServiceFactory * factory )
 {
 	mListenfd = listenfd;
+	mPodfd = podfd;
 	mFactory = factory;
 
 	mMaxRequestsPerProc = 0;
@@ -142,7 +150,7 @@ void SP_ProcWorkerFactoryLFAdapter :: setMaxRequestsPerProc( int maxRequestsPerP
 
 SP_ProcWorker * SP_ProcWorkerFactoryLFAdapter :: create() const
 {
-	SP_ProcWorkerLFAdapter * worker = new SP_ProcWorkerLFAdapter( mListenfd, mFactory );
+	SP_ProcWorkerLFAdapter * worker = new SP_ProcWorkerLFAdapter( mListenfd, mPodfd, mFactory );
 	worker->setMaxRequestsPerProc( mMaxRequestsPerProc );
 
 	return worker;
@@ -213,17 +221,22 @@ int SP_ProcLFServer :: start()
 	signal( SIGPIPE, SIG_IGN );
 	signal( SIGCHLD, SIG_IGN );
 
+	// filedes[0] is for reading, filedes[1] is for writing
+	int podfds[ 2 ] = { 0 };
+	assert( 0 == pipe( podfds ) );
+
 	int listenfd = -1;
 	assert( 0 == SP_ProcPduUtils::tcp_listen( mBindIP, mPort, &listenfd ) );
 
 	SP_ProcWorkerFactoryLFAdapter * factory =
-			new SP_ProcWorkerFactoryLFAdapter( listenfd, mFactory );
+			new SP_ProcWorkerFactoryLFAdapter( listenfd, podfds[0], mFactory );
 	factory->setMaxRequestsPerProc( mMaxRequestsPerProc );
 
 	SP_ProcManager procManager( factory );
 	procManager.start();
 	SP_ProcPool * procPool = procManager.getProcPool();
 
+	close( podfds[0] );
 	close( listenfd );
 
 	if( mMinIdleProc <= 0 ) mMinIdleProc = 1;
@@ -296,15 +309,14 @@ int SP_ProcLFServer :: start()
 		}
 
 		if( idleCount > mMaxIdleProc ) {
+			assert( write( podfds[1], &CHAR_EXIT, 1 ) > 0 );
+			syslog( LOG_INFO, "INFO: idle.count %d, max.idle %d, send a pod", idleCount, mMaxIdleProc );
+
 			for( int i = 0; i < procList.getCount(); i++ ) {
 				SP_ProcInfo * iter = procList.getItem( i );
 				if( iter->isIdle() ) {
-					syslog( LOG_INFO, "INFO: idle.count %d, max.idle %d, force proc #%u to exit",
-						idleCount, mMaxIdleProc, iter->getPid() );
-					write( iter->getPipeFd(), &CHAR_EXIT, 1 );
 					iter->setIdle( 0 );
 					idleCount--;
-
 					break;
 				}
 			}
