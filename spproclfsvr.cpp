@@ -63,11 +63,10 @@ void SP_ProcWorkerLFAdapter :: process( SP_ProcInfo * procInfo )
 {
 	mFactory->workerInit( procInfo );
 
-	int flags = fcntl( mPodfd, F_GETFL, 0 );
-	if( flags >= 0 ) {
-		flags |= O_NONBLOCK;
-		fcntl( mPodfd, F_SETFL, flags );
-	}
+	int flags = 0;
+	assert( ( flags = fcntl( mPodfd, F_GETFL, 0 ) ) >= 0 );
+	flags |= O_NONBLOCK;
+	assert( fcntl( mPodfd, F_SETFL, flags ) >= 0 );
 
 	for( ; ( 0 == mMaxRequestsPerProc )
 			|| ( mMaxRequestsPerProc > 0 && procInfo->getRequests() <= mMaxRequestsPerProc ); ) {
