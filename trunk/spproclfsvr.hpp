@@ -10,6 +10,7 @@ class SP_ProcInetServiceFactory;
 class SP_ProcManager;
 class SP_ProcPool;
 class SP_ProcInfoList;
+class SP_ProcLock;
 
 class SP_ProcLFServer {
 public:
@@ -33,6 +34,8 @@ public:
 	// default is 1
 	void setMinIdleProc( int minIdleProc );
 
+	void setAcceptLock( SP_ProcLock * lock );
+
 	int start();
 
 	int isStop();
@@ -44,6 +47,7 @@ private:
 	int mPort;
 
 	SP_ProcInetServiceFactory * mFactory;
+	SP_ProcLock * mLock;
 
 	int mIsStop;
 	int mMaxProc, mMaxRequestsPerProc, mMaxIdleProc, mMinIdleProc;

@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <signal.h>
+#include <assert.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -20,6 +21,7 @@
 #include "spprocinet.hpp"
 #include "spprocpdu.hpp"
 #include "spprocpool.hpp"
+#include "spproclock.hpp"
 
 #define MAXN    16384           /* max # bytes client can request */
 #define MAXLINE         4096    /* max text line length */
@@ -81,10 +83,34 @@ void sig_int(int signo)
 
 int main( int argc, char * argv[] )
 {
+	int port = 1770, procCount = 10;
+	char lockType = '0';
+
+	extern char *optarg ;
+	int c ;
+
+	while( ( c = getopt ( argc, argv, "p:c:l:v" )) != EOF ) {
+		switch ( c ) {
+			case 'p' :
+				port = atoi( optarg );
+				break;
+			case 'c':
+				procCount = atoi( optarg );
+				break;
+			case 'l':
+				lockType = *optarg;
+				break;
+			case '?' :
+			case 'v' :
+				printf( "Usage: %s [-p <port>] [-c <proc count>] [-l <f|t>]\n", argv[0] );
+				exit( 0 );
+		}
+	}
+
 #ifdef LOG_PERROR
-	openlog( "testproclfsvr", LOG_CONS | LOG_PID | LOG_PERROR, LOG_USER );
+	openlog( "testlfserver", LOG_CONS | LOG_PID | LOG_PERROR, LOG_USER );
 #else
-	openlog( "testproclfsvr", LOG_CONS | LOG_PID, LOG_USER );
+	openlog( "testlfserver", LOG_CONS | LOG_PID, LOG_USER );
 #endif
 
 	setlogmask( LOG_UPTO( LOG_INFO ) );
@@ -92,8 +118,6 @@ int main( int argc, char * argv[] )
 	printf( "This test case is similar to the <Unix Network Programming, V1, Third Ed>\n" );
 	printf( "chapter 30.6 TCP Preforked Server, No Locking Around accept\n" );
 	printf( "You can run the testinetclient to communicate with this server\n\n" );
-
-	int port = 1770, procCount = 10;
 
 	printf( "testproclfsvr listen on port [%d]\n", port );
 
@@ -105,6 +129,18 @@ int main( int argc, char * argv[] )
 	server.setMaxProc( procCount );
 	server.setMaxIdleProc( procCount );
 	server.setMinIdleProc( procCount );
+
+	SP_ProcLock * lock = NULL;
+	if( 'f' == lockType || 'F' == lockType ) {
+		lock = new SP_ProcFileLock();
+		assert( 0 == ((SP_ProcFileLock*)lock)->init( "/tmp/testlfserver.lck" ) );
+	} else if( 't' == lockType || 'T' == lockType ) {
+		lock = new SP_ProcThreadLock();
+	} else {
+		// no locking
+	}
+
+	server.setAcceptLock( lock );
 
 	server.start();
 

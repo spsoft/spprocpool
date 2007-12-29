@@ -22,6 +22,7 @@
 #include "spprocmanager.hpp"
 #include "spprocpool.hpp"
 #include "spprocpdu.hpp"
+#include "spproclock.hpp"
 
 class SP_ProcWorkerLFAdapter : public SP_ProcWorker {
 public:
@@ -32,9 +33,12 @@ public:
 
 	virtual void process( SP_ProcInfo * procInfo );
 
+	void setAcceptLock( SP_ProcLock * lock );
+
 private:
 	int mListenfd, mPodfd;
 	SP_ProcInetServiceFactory * mFactory;
+	SP_ProcLock * mLock;
 
 	int mMaxRequestsPerProc;
 };
@@ -44,6 +48,7 @@ SP_ProcWorkerLFAdapter :: SP_ProcWorkerLFAdapter( int listenfd, int podfd, SP_Pr
 	mListenfd = listenfd;
 	mPodfd = podfd;
 	mFactory = factory;
+	mLock = NULL;
 
 	mMaxRequestsPerProc = 0;
 }
@@ -57,6 +62,11 @@ SP_ProcWorkerLFAdapter :: ~SP_ProcWorkerLFAdapter()
 void SP_ProcWorkerLFAdapter :: setMaxRequestsPerProc( int maxRequestsPerProc )
 {
 	mMaxRequestsPerProc = maxRequestsPerProc;
+}
+
+void SP_ProcWorkerLFAdapter :: setAcceptLock( SP_ProcLock * lock )
+{
+	mLock = lock;
 }
 
 void SP_ProcWorkerLFAdapter :: process( SP_ProcInfo * procInfo )
@@ -73,7 +83,13 @@ void SP_ProcWorkerLFAdapter :: process( SP_ProcInfo * procInfo )
 
 		struct sockaddr_in clientAddr;
 		socklen_t clientLen = sizeof( clientAddr );
+
+		if( NULL != mLock ) assert( 0 == mLock->lock() );
+
 		int fd = accept( mListenfd, (struct sockaddr *)&clientAddr, &clientLen );
+
+		if( NULL != mLock ) assert( 0 == mLock->unlock() );
+
 		if( fd >= 0 ) {
 			assert( write( procInfo->getPipeFd(), &SP_ProcLFServer::CHAR_BUSY, 1 ) > 0 );
 
@@ -117,11 +133,14 @@ public:
 
 	void setMaxRequestsPerProc( int maxRequestsPerProc );
 
+	void setAcceptLock( SP_ProcLock * lock );
+
 	virtual SP_ProcWorker * create() const;
 
 private:
 	int mListenfd, mPodfd;
 	SP_ProcInetServiceFactory * mFactory;
+	SP_ProcLock * mLock;
 
 	int mMaxRequestsPerProc;
 };
@@ -132,6 +151,7 @@ SP_ProcWorkerFactoryLFAdapter :: SP_ProcWorkerFactoryLFAdapter(
 	mListenfd = listenfd;
 	mPodfd = podfd;
 	mFactory = factory;
+	mLock = NULL;
 
 	mMaxRequestsPerProc = 0;
 }
@@ -147,10 +167,16 @@ void SP_ProcWorkerFactoryLFAdapter :: setMaxRequestsPerProc( int maxRequestsPerP
 	mMaxRequestsPerProc = maxRequestsPerProc;
 }
 
+void SP_ProcWorkerFactoryLFAdapter :: setAcceptLock( SP_ProcLock * lock )
+{
+	mLock = lock;
+}
+
 SP_ProcWorker * SP_ProcWorkerFactoryLFAdapter :: create() const
 {
 	SP_ProcWorkerLFAdapter * worker = new SP_ProcWorkerLFAdapter( mListenfd, mPodfd, mFactory );
 	worker->setMaxRequestsPerProc( mMaxRequestsPerProc );
+	worker->setAcceptLock( mLock );
 
 	return worker;
 }
@@ -178,6 +204,8 @@ SP_ProcLFServer :: SP_ProcLFServer( const char * bindIP, int port,
 	mMaxRequestsPerProc = 0;
 
 	mIsStop = 1;
+
+	mLock = NULL;
 }
 
 SP_ProcLFServer :: ~SP_ProcLFServer()
@@ -202,6 +230,11 @@ void SP_ProcLFServer :: setMaxIdleProc( int maxIdleProc )
 void SP_ProcLFServer :: setMinIdleProc( int minIdleProc )
 {
 	mMinIdleProc = minIdleProc;
+}
+
+void SP_ProcLFServer :: setAcceptLock( SP_ProcLock * lock )
+{
+	mLock = lock;
 }
 
 int SP_ProcLFServer :: isStop()
@@ -230,6 +263,7 @@ int SP_ProcLFServer :: start()
 	SP_ProcWorkerFactoryLFAdapter * factory =
 			new SP_ProcWorkerFactoryLFAdapter( listenfd, podfds[0], mFactory );
 	factory->setMaxRequestsPerProc( mMaxRequestsPerProc );
+	factory->setAcceptLock( mLock );
 
 	SP_ProcManager procManager( factory );
 	procManager.start();
