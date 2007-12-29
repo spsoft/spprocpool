@@ -23,7 +23,7 @@ endif
 
 #--------------------------------------------------------------------
 
-LIBOBJS = spprocpdu.o spprocmanager.o spprocpool.o \
+LIBOBJS = spprocpdu.o spproclock.o spprocmanager.o spprocpool.o \
 		spprocdatum.o spprocinet.o spproclfsvr.o
 
 TARGET =  libspprocpool.so

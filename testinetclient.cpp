@@ -77,6 +77,8 @@ int main(int argc, char **argv)
 
 				int connectTime = clock.getInterval();
 
+				int socketTime = 0, closeTime = 0;
+
 				if( fd >= 0 ) {
 					write(fd, request, strlen(request));
 
@@ -85,17 +87,19 @@ int main(int argc, char **argv)
 						exit( -1 );
 					}
 
+					socketTime = clock.getInterval();
+
 					close(fd);		/* TIME_WAIT on client, not server */
+
+					closeTime = clock.getInterval();
 				} else {
 					connFail++;
 				}
 
-				int socketTime = clock.getInterval();
-
-				if( ( connectTime + socketTime ) > 10 ) {
+				if( ( connectTime + socketTime + closeTime ) > 10 ) {
 					gt10ms++;
-					//printf( "child %d, loop %d, connect.time %d, socket.time %d\n",
-						//i, j, connectTime, socketTime );
+					//printf( "child %d, loop %d, connect %d, socket %d, close %d\n",
+						//i, j, connectTime, socketTime, closeTime );
 				} else {
 					lt10ms++;
 				}
