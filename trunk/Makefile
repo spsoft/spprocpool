@@ -19,6 +19,7 @@ OS=$(shell uname)
 
 ifeq ($(OS), SunOS)
 	LDFLAGS += -lnsl -lsocket
+	CFLAGS += -D_POSIX_THREAD_PROCESS_SHARED
 endif
 
 #--------------------------------------------------------------------
