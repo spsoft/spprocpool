@@ -12,6 +12,8 @@ class SP_ProcPool;
 class SP_ProcInfoList;
 class SP_ProcLock;
 
+typedef struct tagSP_ProcArgs SP_ProcArgs_t;
+
 class SP_ProcLFServer {
 public:
 	static const char CHAR_BUSY;
@@ -22,17 +24,8 @@ public:
 			SP_ProcInetServiceFactory * factory );
 	~SP_ProcLFServer();
 
-	// default is 64
-	void setMaxProc( int maxProc );
-
-	// default is 0, unlimited
-	void setMaxRequestsPerProc( int maxRequestsPerProc );
-
-	// default is 5
-	void setMaxIdleProc( int maxIdleProc );
-
-	// default is 1
-	void setMinIdleProc( int minIdleProc );
+	void setArgs( const SP_ProcArgs_t * args );
+	void getArgs( SP_ProcArgs_t * args ) const;
 
 	void setAcceptLock( SP_ProcLock * lock );
 
@@ -50,7 +43,7 @@ private:
 	SP_ProcLock * mLock;
 
 	int mIsStop;
-	int mMaxProc, mMaxRequestsPerProc, mMaxIdleProc, mMinIdleProc;
+	SP_ProcArgs_t * mArgs;
 };
 
 #endif

@@ -37,6 +37,8 @@ public:
 private:
 	SP_ProcPool * mPool;
 	SP_ProcWorkerFactory * mFactory;
+
+	static void sigchild( int signo );
 };
 
 #endif

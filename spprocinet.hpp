@@ -29,23 +29,21 @@ public:
 	virtual void workerEnd( const SP_ProcInfo * procInfo );
 };
 
+typedef struct tagSP_ProcArgs {
+	int mMaxRequestsPerProc;
+	int mMaxProc;
+	int mMaxIdleProc;
+	int mMinIdleProc;
+} SP_ProcArgs_t;
+
 class SP_ProcInetServer {
 public:
 	SP_ProcInetServer( const char * bindIP, int port,
 			SP_ProcInetServiceFactory * factory );
 	~SP_ProcInetServer();
 
-	// default is 64
-	void setMaxProc( int maxProc );
-
-	// default is 0, unlimited
-	void setMaxRequestsPerProc( int maxRequestsPerProc );
-
-	// default is 5
-	void setMaxIdleProc( int maxIdleProc );
-
-	// default is 1
-	void setMinIdleProc( int minIdleProc );
+	void setArgs( const SP_ProcArgs_t * args );
+	void getArgs( SP_ProcArgs_t * args ) const;
 
 	int start();
 
@@ -60,7 +58,7 @@ private:
 	SP_ProcInetServiceFactory * mFactory;
 
 	int mIsStop;
-	int mMaxProc, mMaxRequestsPerProc, mMaxIdleProc, mMinIdleProc;
+	SP_ProcArgs_t * mArgs;
 };
 
 #endif

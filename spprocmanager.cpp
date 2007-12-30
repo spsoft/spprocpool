@@ -9,9 +9,11 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <syslog.h>
 #include <string.h>
 #include <errno.h>
+#include <signal.h>
 
 #include "spprocmanager.hpp"
 #include "spprocpool.hpp"
@@ -45,6 +47,15 @@ SP_ProcManager :: ~SP_ProcManager()
 	mPool = NULL;
 }
 
+void SP_ProcManager :: sigchild( int signo )
+{
+	pid_t pid;
+	int stat;
+
+	while( ( pid = waitpid( -1, &stat, WNOHANG ) ) > 0 ) {
+	}
+}
+
 void SP_ProcManager :: start()
 {
 	int pipeFd[ 2 ] = { -1, -1 };
@@ -60,6 +71,8 @@ void SP_ProcManager :: start()
 
 		} else if( 0 == pid ) {
 			// child, process manager
+			signal( SIGCHLD, sigchild );
+
 			close( pipeFd[0] );
 
 			for( ; ; ) {
