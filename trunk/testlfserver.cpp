@@ -126,9 +126,8 @@ int main( int argc, char * argv[] )
 	SP_ProcLFServer server( "", port, new SP_ProcUnpServiceFactory() );
 
 	// make a fixed number proc pool
-	server.setMaxProc( procCount );
-	server.setMaxIdleProc( procCount );
-	server.setMinIdleProc( procCount );
+	SP_ProcArgs_t args = { 0, procCount, procCount, procCount };
+	server.setArgs( &args );
 
 	SP_ProcLock * lock = NULL;
 	if( 'f' == lockType || 'F' == lockType ) {

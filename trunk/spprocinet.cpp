@@ -11,6 +11,7 @@
 #include <signal.h>
 #include <netinet/in.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 
@@ -138,37 +139,33 @@ SP_ProcInetServer :: SP_ProcInetServer( const char * bindIP, int port,
 
 	mFactory = factory;
 
-	mMaxProc = 64;
-	mMaxIdleProc = 5;
-	mMinIdleProc = 1;
-
-	mMaxRequestsPerProc = 0;
+	mArgs = (SP_ProcArgs_t*)malloc( sizeof( SP_ProcArgs_t ) );
+	mArgs->mMaxProc = 64;
+	mArgs->mMaxIdleProc = 5;
+	mArgs->mMinIdleProc = 1;
+	mArgs->mMaxRequestsPerProc = 0;
 
 	mIsStop = 1;
 }
 
 SP_ProcInetServer :: ~SP_ProcInetServer()
 {
+	free( mArgs );
+	mArgs = NULL;
 }
 
-void SP_ProcInetServer :: setMaxProc( int maxProc )
+void SP_ProcInetServer :: setArgs( const SP_ProcArgs_t * args )
 {
-	mMaxProc = maxProc;
+	* mArgs = * args;
+
+	if( mArgs->mMinIdleProc <= 0 ) mArgs->mMinIdleProc = 1;
+	if( mArgs->mMaxIdleProc < mArgs->mMinIdleProc ) mArgs->mMaxIdleProc = mArgs->mMinIdleProc;
+	if( mArgs->mMaxProc <= 0 ) mArgs->mMaxProc = mArgs->mMaxIdleProc;
 }
 
-void SP_ProcInetServer :: setMaxRequestsPerProc( int maxRequestsPerProc )
+void SP_ProcInetServer :: getArgs( SP_ProcArgs_t * args ) const
 {
-	mMaxRequestsPerProc = maxRequestsPerProc;
-}
-
-void SP_ProcInetServer :: setMaxIdleProc( int maxIdleProc )
-{
-	mMaxIdleProc = maxIdleProc;
-}
-
-void SP_ProcInetServer :: setMinIdleProc( int minIdleProc )
-{
-	mMinIdleProc = minIdleProc;
+	* args = * mArgs;
 }
 
 void SP_ProcInetServer :: shutdown()
@@ -193,13 +190,9 @@ int SP_ProcInetServer :: start()
 	procManager.start();
 	SP_ProcPool * procPool = procManager.getProcPool();
 
-	if( mMinIdleProc <= 0 ) mMinIdleProc = 1;
-	if( mMaxIdleProc < mMinIdleProc ) mMaxIdleProc = mMinIdleProc;
-	if( mMaxProc <= 0 ) mMaxProc = mMaxIdleProc;
-
-	procPool->setMaxRequestsPerProc( mMaxRequestsPerProc );
-	procPool->setMaxIdleProc( mMaxIdleProc );
-	procPool->ensureIdleProc( mMinIdleProc );
+	procPool->setMaxRequestsPerProc( mArgs->mMaxRequestsPerProc );
+	procPool->setMaxIdleProc( mArgs->mMaxIdleProc );
+	procPool->ensureIdleProc( mArgs->mMinIdleProc );
 
 	SP_ProcInfoList busyList;
 
@@ -218,7 +211,7 @@ int SP_ProcInetServer :: start()
 			maxfd = maxfd > iter->getPipeFd() ? maxfd : iter->getPipeFd();
 		}
 
-		if( busyList.getCount() >= mMaxProc ) FD_CLR( listenfd, &rset );
+		if( busyList.getCount() >= mArgs->mMaxProc ) FD_CLR( listenfd, &rset );
 
 		int nsel = 0;
 
@@ -227,7 +220,7 @@ int SP_ProcInetServer :: start()
 		}
 
 		/* check for new connections */
-		if( FD_ISSET( listenfd, &rset ) && busyList.getCount() < mMaxProc ) {
+		if( FD_ISSET( listenfd, &rset ) && busyList.getCount() < mArgs->mMaxProc ) {
 			SP_ProcInfo * info = procPool->get();
 
 			if( NULL != info ) {
@@ -270,7 +263,7 @@ int SP_ProcInetServer :: start()
 
 		int idleCount = procPool->getIdleCount();
 		int totalCount = idleCount + busyList.getCount();
-		if( ( idleCount < mMinIdleProc ) && ( totalCount < mMaxProc ) ) {
+		if( ( idleCount < mArgs->mMinIdleProc ) && ( totalCount < mArgs->mMaxProc ) ) {
 			procPool->ensureIdleProc( procPool->getIdleCount() + 1 );
 		}
 	}

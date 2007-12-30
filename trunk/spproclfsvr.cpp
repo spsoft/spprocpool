@@ -12,6 +12,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <fcntl.h>
+#include <stdlib.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -197,11 +198,11 @@ SP_ProcLFServer :: SP_ProcLFServer( const char * bindIP, int port,
 
 	mFactory = factory;
 
-	mMaxProc = 64;
-	mMaxIdleProc = 5;
-	mMinIdleProc = 1;
-
-	mMaxRequestsPerProc = 0;
+	mArgs = (SP_ProcArgs_t*)malloc( sizeof( SP_ProcArgs_t ) );
+	mArgs->mMaxProc = 64;
+	mArgs->mMaxIdleProc = 5;
+	mArgs->mMinIdleProc = 1;
+	mArgs->mMaxRequestsPerProc = 0;
 
 	mIsStop = 1;
 
@@ -210,26 +211,22 @@ SP_ProcLFServer :: SP_ProcLFServer( const char * bindIP, int port,
 
 SP_ProcLFServer :: ~SP_ProcLFServer()
 {
+	free( mArgs );
+	mArgs = NULL;
 }
 
-void SP_ProcLFServer :: setMaxProc( int maxProc )
+void SP_ProcLFServer :: setArgs( const SP_ProcArgs_t * args )
 {
-	mMaxProc = maxProc;
+	* mArgs = * args;
+
+	if( mArgs->mMinIdleProc <= 0 ) mArgs->mMinIdleProc = 1;
+	if( mArgs->mMaxIdleProc < mArgs->mMinIdleProc ) mArgs->mMaxIdleProc = mArgs->mMinIdleProc;
+	if( mArgs->mMaxProc <= 0 ) mArgs->mMaxProc = mArgs->mMaxIdleProc;
 }
 
-void SP_ProcLFServer :: setMaxRequestsPerProc( int maxRequestsPerProc )
+void SP_ProcLFServer :: getArgs( SP_ProcArgs_t * args ) const
 {
-	mMaxRequestsPerProc = maxRequestsPerProc;
-}
-
-void SP_ProcLFServer :: setMaxIdleProc( int maxIdleProc )
-{
-	mMaxIdleProc = maxIdleProc;
-}
-
-void SP_ProcLFServer :: setMinIdleProc( int minIdleProc )
-{
-	mMinIdleProc = minIdleProc;
+	* args = * mArgs;
 }
 
 void SP_ProcLFServer :: setAcceptLock( SP_ProcLock * lock )
@@ -251,7 +248,6 @@ int SP_ProcLFServer :: start()
 {
 	/* Don't die with SIGPIPE on remote read shutdown. That's dumb. */
 	signal( SIGPIPE, SIG_IGN );
-	signal( SIGCHLD, SIG_IGN );
 
 	// filedes[0] is for reading, filedes[1] is for writing
 	int podfds[ 2 ] = { 0 };
@@ -262,7 +258,7 @@ int SP_ProcLFServer :: start()
 
 	SP_ProcWorkerFactoryLFAdapter * factory =
 			new SP_ProcWorkerFactoryLFAdapter( listenfd, podfds[0], mFactory );
-	factory->setMaxRequestsPerProc( mMaxRequestsPerProc );
+	factory->setMaxRequestsPerProc( mArgs->mMaxRequestsPerProc );
 	factory->setAcceptLock( mLock );
 
 	SP_ProcManager procManager( factory );
@@ -272,13 +268,9 @@ int SP_ProcLFServer :: start()
 	close( podfds[0] );
 	close( listenfd );
 
-	if( mMinIdleProc <= 0 ) mMinIdleProc = 1;
-	if( mMaxIdleProc < mMinIdleProc ) mMaxIdleProc = mMinIdleProc;
-	if( mMaxProc <= 0 ) mMaxProc = mMaxIdleProc;
-
 	SP_ProcInfoList procList;
 
-	for( int i = 0; i < mMinIdleProc; i++ ) {
+	for( int i = 0; i < mArgs->mMinIdleProc; i++ ) {
 		SP_ProcInfo * info = procPool->get();
 		if( NULL != info ) {
 			procList.append( info );
@@ -341,9 +333,10 @@ int SP_ProcLFServer :: start()
 			}
 		}
 
-		if( idleCount > mMaxIdleProc ) {
+		if( idleCount > mArgs->mMaxIdleProc ) {
 			assert( write( podfds[1], &CHAR_EXIT, 1 ) > 0 );
-			syslog( LOG_INFO, "INFO: idle.count %d, max.idle %d, send a pod", idleCount, mMaxIdleProc );
+			syslog( LOG_INFO, "INFO: idle.count %d, max.idle %d, send a pod",
+					idleCount, mArgs->mMaxIdleProc );
 
 			for( int i = 0; i < procList.getCount(); i++ ) {
 				SP_ProcInfo * iter = procList.getItem( i );
@@ -355,7 +348,7 @@ int SP_ProcLFServer :: start()
 			}
 		}
 
-		if( idleCount < mMinIdleProc && procList.getCount() < mMaxProc ) {
+		if( idleCount < mArgs->mMinIdleProc && procList.getCount() < mArgs->mMaxProc ) {
 			SP_ProcInfo * info = procPool->get();
 			if( NULL != info ) {
 				idleCount++;
