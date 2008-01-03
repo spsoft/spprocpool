@@ -118,8 +118,10 @@ void SP_ProcManager :: start()
 					} else {
 						syslog( LOG_WARNING, "WARN: recv fd fail, errno %d, %s", errno, strerror( errno ) );
 					}
-					kill( 0, SIGUSR1 );
-					break;
+					if( EINTR != errno ) {
+						kill( 0, SIGUSR1 );
+						break;
+					}
 				}
 			}
 		} else {

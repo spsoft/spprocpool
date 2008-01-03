@@ -129,7 +129,7 @@ SP_ProcWorker * SP_ProcWorkerFactoryInetAdapter :: create() const
 
 //-------------------------------------------------------------------
 
-SP_ProcInetServer :: SP_ProcInetServer( const char * bindIP, int port,
+SP_ProcBaseServer :: SP_ProcBaseServer( const char * bindIP, int port,
 		SP_ProcInetServiceFactory * factory )
 {
 	strncpy( mBindIP, bindIP, sizeof( mBindIP ) );
@@ -143,18 +143,19 @@ SP_ProcInetServer :: SP_ProcInetServer( const char * bindIP, int port,
 	mArgs->mMaxProc = 64;
 	mArgs->mMaxIdleProc = 5;
 	mArgs->mMinIdleProc = 1;
-	mArgs->mMaxRequestsPerProc = 0;
+
+	mMaxRequestsPerProc = 0;
 
 	mIsStop = 1;
 }
 
-SP_ProcInetServer :: ~SP_ProcInetServer()
+SP_ProcBaseServer :: ~SP_ProcBaseServer()
 {
 	free( mArgs );
 	mArgs = NULL;
 }
 
-void SP_ProcInetServer :: setArgs( const SP_ProcArgs_t * args )
+void SP_ProcBaseServer :: setArgs( const SP_ProcArgs_t * args )
 {
 	* mArgs = * args;
 
@@ -163,19 +164,36 @@ void SP_ProcInetServer :: setArgs( const SP_ProcArgs_t * args )
 	if( mArgs->mMaxProc <= 0 ) mArgs->mMaxProc = mArgs->mMaxIdleProc;
 }
 
-void SP_ProcInetServer :: getArgs( SP_ProcArgs_t * args ) const
+void SP_ProcBaseServer :: getArgs( SP_ProcArgs_t * args ) const
 {
 	* args = * mArgs;
 }
 
-void SP_ProcInetServer :: shutdown()
+void SP_ProcBaseServer :: setMaxRequestsPerProc( int maxRequestsPerProc )
+{
+	mMaxRequestsPerProc = maxRequestsPerProc;
+}
+
+void SP_ProcBaseServer :: shutdown()
 {
 	mIsStop = 1;
 }
 
-int SP_ProcInetServer :: isStop()
+int SP_ProcBaseServer :: isStop()
 {
 	return mIsStop;
+}
+
+//-------------------------------------------------------------------
+
+SP_ProcInetServer :: SP_ProcInetServer( const char * bindIP, int port,
+			SP_ProcInetServiceFactory * factory )
+	: SP_ProcBaseServer( bindIP, port, factory )
+{
+}
+
+SP_ProcInetServer :: ~SP_ProcInetServer()
+{
 }
 
 int SP_ProcInetServer :: start()
@@ -190,7 +208,7 @@ int SP_ProcInetServer :: start()
 	procManager.start();
 	SP_ProcPool * procPool = procManager.getProcPool();
 
-	procPool->setMaxRequestsPerProc( mArgs->mMaxRequestsPerProc );
+	procPool->setMaxRequestsPerProc( mMaxRequestsPerProc );
 	procPool->setMaxIdleProc( mArgs->mMaxIdleProc );
 	procPool->ensureIdleProc( mArgs->mMinIdleProc );
 

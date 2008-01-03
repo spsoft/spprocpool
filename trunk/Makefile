@@ -25,12 +25,14 @@ endif
 #--------------------------------------------------------------------
 
 LIBOBJS = spprocpdu.o spproclock.o spprocmanager.o spprocpool.o \
-		spprocdatum.o spprocinet.o spproclfsvr.o
+		spprocdatum.o spprocinet.o spproclfsvr.o spprocmtsvr.o \
+		spprocthread.o
 
 TARGET =  libspprocpool.so
 
-TEST_TARGET = testprocpdu testprocpool testprocdatum \
-		testinetserver testlfserver testinetclient
+TEST_TARGET = testprocpdu testprocpool testprocdatum testthread \
+		testinetserver testlfserver testmtserver \
+		testinetclient
 
 #--------------------------------------------------------------------
 
@@ -56,7 +58,13 @@ testinetserver: testinetserver.o
 testlfserver: testlfserver.o
 	$(LINKER) $(LDFLAGS) $^ -o $@ -L. -lspprocpool
 
+testmtserver: testmtserver.o
+	$(LINKER) $(LDFLAGS) $^ -o $@ -L. -lspprocpool
+
 testinetclient: testinetclient.o
+	$(LINKER) $(LDFLAGS) $^ -o $@ -L. -lspprocpool
+
+testthread: testthread.o
 	$(LINKER) $(LDFLAGS) $^ -o $@ -L. -lspprocpool
 
 dist: clean spprocpool-$(version).src.tar.gz

@@ -12,6 +12,10 @@
 
 class SP_ProcInfo {
 public:
+	static const char CHAR_BUSY;
+	static const char CHAR_IDLE;
+	static const char CHAR_EXIT;
+
 	SP_ProcInfo( int pipeFd );
 	~SP_ProcInfo();
 
