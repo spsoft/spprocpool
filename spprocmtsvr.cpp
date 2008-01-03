@@ -1,36 +1,37 @@
 /*
- * Copyright 2007 Stephen Liu
+ * Copyright 2007-2008 Stephen Liu
  * For license terms, see the file COPYING along with this library.
  */
 
+#include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
 #include <assert.h>
-#include <syslog.h>
 #include <errno.h>
-#include <signal.h>
 #include <unistd.h>
+#include <syslog.h>
 #include <signal.h>
 #include <stdio.h>
-#include <fcntl.h>
-#include <stdlib.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#include "spproclfsvr.hpp"
-
+#include "spprocmtsvr.hpp"
 #include "spprocinet.hpp"
 #include "spprocmanager.hpp"
 #include "spprocpool.hpp"
-#include "spprocpdu.hpp"
 #include "spproclock.hpp"
+#include "spprocpdu.hpp"
+#include "spprocthread.hpp"
 
-class SP_ProcWorkerLFAdapter : public SP_ProcWorker {
+class SP_ProcWorkerMTAdapter : public SP_ProcWorker {
 public:
-	SP_ProcWorkerLFAdapter( int listenfd, int podfd, SP_ProcInetServiceFactory * factory );
-	~SP_ProcWorkerLFAdapter();
+	SP_ProcWorkerMTAdapter( int listenfd, int podfd, SP_ProcInetServiceFactory * factory );
+	~SP_ProcWorkerMTAdapter();
 
 	void setMaxRequestsPerProc( int maxRequestsPerProc );
+
+	void setThreadsPerProc( int threadsPerProc );
 
 	virtual void process( SP_ProcInfo * procInfo );
 
@@ -41,36 +42,77 @@ private:
 	SP_ProcInetServiceFactory * mFactory;
 	SP_ProcLock * mLock;
 
-	int mMaxRequestsPerProc;
+	int mIsStop;
+	int mMaxRequestsPerProc, mThreadsPerProc;
+
+	typedef struct tagWorkerArgs {
+		SP_ProcInetServiceFactory * mFactory;
+		SP_ProcThreadPool * mThreadPool;
+		int mPipeFd;
+		int mSockFd;
+	} WorkerArgs_t;
+
+	static void workerFunc( void * args );
+	static void reportFunc( void * args );
 };
 
-SP_ProcWorkerLFAdapter :: SP_ProcWorkerLFAdapter( int listenfd, int podfd, SP_ProcInetServiceFactory * factory )
+SP_ProcWorkerMTAdapter :: SP_ProcWorkerMTAdapter( int listenfd, int podfd, SP_ProcInetServiceFactory * factory )
 {
 	mListenfd = listenfd;
 	mPodfd = podfd;
 	mFactory = factory;
 	mLock = NULL;
 
+	mIsStop = 0;
 	mMaxRequestsPerProc = 0;
+	mThreadsPerProc = 10;
 }
 
-SP_ProcWorkerLFAdapter :: ~SP_ProcWorkerLFAdapter()
+SP_ProcWorkerMTAdapter :: ~SP_ProcWorkerMTAdapter()
 {
 	delete mFactory;
 	mFactory = NULL;
 }
 
-void SP_ProcWorkerLFAdapter :: setMaxRequestsPerProc( int maxRequestsPerProc )
+void SP_ProcWorkerMTAdapter :: setMaxRequestsPerProc( int maxRequestsPerProc )
 {
 	mMaxRequestsPerProc = maxRequestsPerProc;
 }
 
-void SP_ProcWorkerLFAdapter :: setAcceptLock( SP_ProcLock * lock )
+void SP_ProcWorkerMTAdapter :: setThreadsPerProc( int threadsPerProc )
+{
+	mThreadsPerProc = threadsPerProc;
+}
+
+void SP_ProcWorkerMTAdapter :: setAcceptLock( SP_ProcLock * lock )
 {
 	mLock = lock;
 }
 
-void SP_ProcWorkerLFAdapter :: process( SP_ProcInfo * procInfo )
+void SP_ProcWorkerMTAdapter :: reportFunc( void * args )
+{
+	SP_ProcInfo * procInfo = ( SP_ProcInfo * )args;
+
+	int ret = write( procInfo->getPipeFd(), &SP_ProcInfo::CHAR_IDLE, 1 );
+	if( ret <= 0 ) {
+		syslog( LOG_WARNING, "WARN: write = %d, errno %d, %s",
+				ret, errno, strerror( errno ) );
+	}
+}
+
+void SP_ProcWorkerMTAdapter :: workerFunc( void * args )
+{
+	WorkerArgs_t * workerArgs = (WorkerArgs_t*)args;
+
+	SP_ProcInetService * service = workerArgs->mFactory->create();
+	service->handle( workerArgs->mSockFd );
+	close( workerArgs->mSockFd );
+	delete service;
+
+	free( workerArgs );
+}
+
+void SP_ProcWorkerMTAdapter :: process( SP_ProcInfo * procInfo )
 {
 	mFactory->workerInit( procInfo );
 
@@ -79,8 +121,13 @@ void SP_ProcWorkerLFAdapter :: process( SP_ProcInfo * procInfo )
 	flags |= O_NONBLOCK;
 	assert( fcntl( mPodfd, F_SETFL, flags ) >= 0 );
 
+	SP_ProcThreadPool * threadPool = new SP_ProcThreadPool( mThreadsPerProc );
+	threadPool->setFullCallback( reportFunc, procInfo );
+
 	for( ; ( 0 == mMaxRequestsPerProc )
 			|| ( mMaxRequestsPerProc > 0 && procInfo->getRequests() <= mMaxRequestsPerProc ); ) {
+
+		threadPool->wait4idler();
 
 		struct sockaddr_in clientAddr;
 		socklen_t clientLen = sizeof( clientAddr );
@@ -94,12 +141,13 @@ void SP_ProcWorkerLFAdapter :: process( SP_ProcInfo * procInfo )
 		if( fd >= 0 ) {
 			assert( write( procInfo->getPipeFd(), &SP_ProcInfo::CHAR_BUSY, 1 ) > 0 );
 
-			SP_ProcInetService * service = mFactory->create();
-			service->handle( fd );
-			close( fd );
-			delete service;
+			WorkerArgs_t * args = (WorkerArgs_t*)malloc( sizeof( WorkerArgs_t ) );
+			args->mFactory = mFactory;
+			args->mThreadPool = threadPool;
+			args->mPipeFd = procInfo->getPipeFd();
+			args->mSockFd = fd;
 
-			assert( write( procInfo->getPipeFd(), &SP_ProcInfo::CHAR_IDLE, 1 ) > 0 );
+			threadPool->dispatch( workerFunc, args );
 
 			procInfo->setRequests( procInfo->getRequests() + 1 );
 		} else {
@@ -114,11 +162,12 @@ void SP_ProcWorkerLFAdapter :: process( SP_ProcInfo * procInfo )
 		}
 
 		char pod = 0;
-		if( read( mPodfd, &pod, 1 ) > 0 ) {
-			assert( write( procInfo->getPipeFd(), &SP_ProcInfo::CHAR_EXIT, 1 ) > 0 );
-			break;
-		}
+		if( read( mPodfd, &pod, 1 ) > 0 ) break;
 	}
+
+	delete threadPool;
+
+	assert( write( procInfo->getPipeFd(), &SP_ProcInfo::CHAR_EXIT, 1 ) > 0 );
 
 	procInfo->setLastActiveTime( time( NULL ) );
 
@@ -127,12 +176,14 @@ void SP_ProcWorkerLFAdapter :: process( SP_ProcInfo * procInfo )
 
 //-------------------------------------------------------------------
 
-class SP_ProcWorkerFactoryLFAdapter : public SP_ProcWorkerFactory {
+class SP_ProcWorkerFactoryMTAdapter : public SP_ProcWorkerFactory {
 public:
-	SP_ProcWorkerFactoryLFAdapter( int listenfd, int podfd, SP_ProcInetServiceFactory * factory );
-	virtual ~SP_ProcWorkerFactoryLFAdapter();
+	SP_ProcWorkerFactoryMTAdapter( int listenfd, int podfd, SP_ProcInetServiceFactory * factory );
+	virtual ~SP_ProcWorkerFactoryMTAdapter();
 
 	void setMaxRequestsPerProc( int maxRequestsPerProc );
+
+	void setThreadsPerProc( int threadsPerProc );
 
 	void setAcceptLock( SP_ProcLock * lock );
 
@@ -143,10 +194,10 @@ private:
 	SP_ProcInetServiceFactory * mFactory;
 	SP_ProcLock * mLock;
 
-	int mMaxRequestsPerProc;
+	int mMaxRequestsPerProc, mThreadsPerProc;
 };
 
-SP_ProcWorkerFactoryLFAdapter :: SP_ProcWorkerFactoryLFAdapter(
+SP_ProcWorkerFactoryMTAdapter :: SP_ProcWorkerFactoryMTAdapter(
 		int listenfd, int podfd, SP_ProcInetServiceFactory * factory )
 {
 	mListenfd = listenfd;
@@ -155,28 +206,35 @@ SP_ProcWorkerFactoryLFAdapter :: SP_ProcWorkerFactoryLFAdapter(
 	mLock = NULL;
 
 	mMaxRequestsPerProc = 0;
+	mThreadsPerProc = 10;
 }
 
-SP_ProcWorkerFactoryLFAdapter :: ~SP_ProcWorkerFactoryLFAdapter()
+SP_ProcWorkerFactoryMTAdapter :: ~SP_ProcWorkerFactoryMTAdapter()
 {
 	delete mFactory;
 	mFactory = NULL;
 }
 
-void SP_ProcWorkerFactoryLFAdapter :: setMaxRequestsPerProc( int maxRequestsPerProc )
+void SP_ProcWorkerFactoryMTAdapter :: setMaxRequestsPerProc( int maxRequestsPerProc )
 {
 	mMaxRequestsPerProc = maxRequestsPerProc;
 }
 
-void SP_ProcWorkerFactoryLFAdapter :: setAcceptLock( SP_ProcLock * lock )
+void SP_ProcWorkerFactoryMTAdapter :: setThreadsPerProc( int threadsPerProc )
+{
+	mThreadsPerProc = threadsPerProc;
+}
+
+void SP_ProcWorkerFactoryMTAdapter :: setAcceptLock( SP_ProcLock * lock )
 {
 	mLock = lock;
 }
 
-SP_ProcWorker * SP_ProcWorkerFactoryLFAdapter :: create() const
+SP_ProcWorker * SP_ProcWorkerFactoryMTAdapter :: create() const
 {
-	SP_ProcWorkerLFAdapter * worker = new SP_ProcWorkerLFAdapter( mListenfd, mPodfd, mFactory );
+	SP_ProcWorkerMTAdapter * worker = new SP_ProcWorkerMTAdapter( mListenfd, mPodfd, mFactory );
 	worker->setMaxRequestsPerProc( mMaxRequestsPerProc );
+	worker->setThreadsPerProc( mThreadsPerProc );
 	worker->setAcceptLock( mLock );
 
 	return worker;
@@ -184,23 +242,30 @@ SP_ProcWorker * SP_ProcWorkerFactoryLFAdapter :: create() const
 
 //-------------------------------------------------------------------
 
-SP_ProcLFServer :: SP_ProcLFServer( const char * bindIP, int port,
-		SP_ProcInetServiceFactory * factory )
+SP_ProcMTServer :: SP_ProcMTServer( const char * bindIP, int port,
+			SP_ProcInetServiceFactory * factory )
 	: SP_ProcBaseServer( bindIP, port, factory )
 {
+	mThreadsPerProc = 10;
 	mLock = NULL;
 }
 
-SP_ProcLFServer :: ~SP_ProcLFServer()
+SP_ProcMTServer :: ~SP_ProcMTServer()
 {
 }
 
-void SP_ProcLFServer :: setAcceptLock( SP_ProcLock * lock )
+void SP_ProcMTServer :: setThreadsPerProc( int threadsPerProc )
+{
+	mThreadsPerProc = threadsPerProc;
+	if( mThreadsPerProc <= 0 ) mThreadsPerProc = 1;
+}
+
+void SP_ProcMTServer :: setAcceptLock( SP_ProcLock * lock )
 {
 	mLock = lock;
 }
 
-int SP_ProcLFServer :: start()
+int SP_ProcMTServer :: start()
 {
 	/* Don't die with SIGPIPE on remote read shutdown. That's dumb. */
 	signal( SIGPIPE, SIG_IGN );
@@ -212,9 +277,10 @@ int SP_ProcLFServer :: start()
 	int listenfd = -1;
 	assert( 0 == SP_ProcPduUtils::tcp_listen( mBindIP, mPort, &listenfd ) );
 
-	SP_ProcWorkerFactoryLFAdapter * factory =
-			new SP_ProcWorkerFactoryLFAdapter( listenfd, podfds[0], mFactory );
+	SP_ProcWorkerFactoryMTAdapter * factory =
+			new SP_ProcWorkerFactoryMTAdapter( listenfd, podfds[0], mFactory );
 	factory->setMaxRequestsPerProc( mMaxRequestsPerProc );
+	factory->setThreadsPerProc( mThreadsPerProc );
 	factory->setAcceptLock( mLock );
 
 	SP_ProcManager procManager( factory );
@@ -241,7 +307,7 @@ int SP_ProcLFServer :: start()
 
 	mIsStop = 0;
 
-	for( ; 0 == mIsStop ; ) {
+	for( ; 0 == mIsStop; ) {
 		fd_set rset;
 		FD_ZERO( &rset );
 

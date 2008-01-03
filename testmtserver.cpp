@@ -17,7 +17,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 
-#include "spproclfsvr.hpp"
+#include "spprocmtsvr.hpp"
 #include "spprocinet.hpp"
 #include "spprocpdu.hpp"
 #include "spprocpool.hpp"
@@ -81,6 +81,12 @@ void sig_int(int signo)
 	kill( 0, SIGUSR1 );
 }
 
+void sig_usr1( int signo )
+{
+	printf( "in %d, %d\n", getpid(), getppid() );
+	exit( 0 );
+}
+
 int main( int argc, char * argv[] )
 {
 	int port = 1770, procCount = 10;
@@ -108,26 +114,27 @@ int main( int argc, char * argv[] )
 	}
 
 #ifdef LOG_PERROR
-	openlog( "testlfserver", LOG_CONS | LOG_PID | LOG_PERROR, LOG_USER );
+	openlog( "testmtserver", LOG_CONS | LOG_PID | LOG_PERROR, LOG_USER );
 #else
-	openlog( "testlfserver", LOG_CONS | LOG_PID, LOG_USER );
+	openlog( "testmtserver", LOG_CONS | LOG_PID, LOG_USER );
 #endif
 
 	setlogmask( LOG_UPTO( LOG_INFO ) );
 
-	printf( "This test case is similar to the <Unix Network Programming, V1, Third Ed>\n" );
-	printf( "chapter 30.6 TCP Preforked Server, No Locking Around accept\n" );
+	printf( "This test case is similar to apache's worker mpm\n" );
 	printf( "You can run the testinetclient to communicate with this server\n\n" );
 
 	printf( "testproclfsvr listen on port [%d]\n", port );
 
 	signal( SIGINT, sig_int );
+	signal( SIGUSR1, sig_usr1 );
 
-	SP_ProcLFServer server( "", port, new SP_ProcUnpServiceFactory() );
+	SP_ProcMTServer server( "", port, new SP_ProcUnpServiceFactory() );
 
 	// make a fixed number proc pool
 	SP_ProcArgs_t args = { procCount, procCount, procCount };
 	server.setArgs( &args );
+	server.setThreadsPerProc( 10 );
 
 	SP_ProcLock * lock = NULL;
 	if( 'f' == lockType || 'F' == lockType ) {

@@ -30,28 +30,31 @@ public:
 };
 
 typedef struct tagSP_ProcArgs {
-	int mMaxRequestsPerProc;
 	int mMaxProc;
 	int mMaxIdleProc;
 	int mMinIdleProc;
 } SP_ProcArgs_t;
 
-class SP_ProcInetServer {
+class SP_ProcBaseServer {
 public:
-	SP_ProcInetServer( const char * bindIP, int port,
+	SP_ProcBaseServer( const char * bindIP, int port,
 			SP_ProcInetServiceFactory * factory );
-	~SP_ProcInetServer();
+	virtual ~SP_ProcBaseServer();
 
 	void setArgs( const SP_ProcArgs_t * args );
+
 	void getArgs( SP_ProcArgs_t * args ) const;
 
-	int start();
+	void setMaxRequestsPerProc( int maxRequestsPerProc );
 
 	int isStop();
 
 	void shutdown();
 
-private:
+	virtual int start() = 0;
+
+protected:
+
 	char mBindIP[ 64 ];
 	int mPort;
 
@@ -59,6 +62,16 @@ private:
 
 	int mIsStop;
 	SP_ProcArgs_t * mArgs;
+	int mMaxRequestsPerProc;
+};
+
+class SP_ProcInetServer : public SP_ProcBaseServer {
+public:
+	SP_ProcInetServer( const char * bindIP, int port,
+			SP_ProcInetServiceFactory * factory );
+	virtual ~SP_ProcInetServer();
+
+	virtual int start();
 };
 
 #endif

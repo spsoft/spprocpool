@@ -101,7 +101,7 @@ int main( int argc, char * argv[] )
 	SP_ProcInetServer server( "", port, new SP_ProcUnpServiceFactory() );
 
 	// make a fixed number proc pool
-	SP_ProcArgs_t args = { 0, procCount, procCount, procCount };
+	SP_ProcArgs_t args = { procCount, procCount, procCount };
 	server.setArgs( &args );
 
 	server.start();

@@ -16,6 +16,10 @@
 #include "spprocpool.hpp"
 #include "spprocpdu.hpp"
 
+const char SP_ProcInfo :: CHAR_BUSY = 'B';
+const char SP_ProcInfo :: CHAR_IDLE = 'I';
+const char SP_ProcInfo :: CHAR_EXIT = '!';
+
 SP_ProcInfo :: SP_ProcInfo( int pipeFd )
 {
 	mPipeFd = pipeFd;

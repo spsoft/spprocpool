@@ -1,10 +1,10 @@
 /*
- * Copyright 2007 Stephen Liu
+ * Copyright 2007-2008 Stephen Liu
  * For license terms, see the file COPYING along with this library.
  */
 
-#ifndef __spproclfsvr_hpp__ 
-#define __spproclfsvr_hpp__
+#ifndef __spprocmtsvr_hpp__
+#define __spprocmtsvr_hpp__
 
 #include "spprocinet.hpp"
 
@@ -16,18 +16,22 @@ class SP_ProcLock;
 
 typedef struct tagSP_ProcArgs SP_ProcArgs_t;
 
-class SP_ProcLFServer : public SP_ProcBaseServer {
+class SP_ProcMTServer : public SP_ProcBaseServer {
 public:
-	SP_ProcLFServer( const char * bindIP, int port,
+	SP_ProcMTServer( const char * bindIP, int port,
 			SP_ProcInetServiceFactory * factory );
-	virtual ~SP_ProcLFServer();
+	virtual ~SP_ProcMTServer();
 
 	virtual int start();
+
+	// default is 10
+	void setThreadsPerProc( int threadsPerProc );
 
 	void setAcceptLock( SP_ProcLock * lock );
 
 private:
 	SP_ProcLock * mLock;
+	int mThreadsPerProc;
 };
 
 #endif
