@@ -117,8 +117,17 @@ int SP_ProcPduUtils :: recv_fd( int sockfd )
 	msg.msg_control = cmptr;
 	msg.msg_controllen = CONTROLLEN;
 
-	if (recvmsg(sockfd, &msg, 0) <= 0)
-		return -1;
+	for( ; ; ) {
+		if (recvmsg(sockfd, &msg, 0) <= 0) {
+			if( EINTR == errno ) {
+				continue;
+			} else {
+				return -1;
+			}
+		} else {
+			break;
+		}
+	}
 
 	return *(int *) CMSG_DATA (cmptr);
 }
@@ -145,8 +154,17 @@ int SP_ProcPduUtils :: send_fd (int sockfd, int fd)
 	cmptr->cmsg_len = CONTROLLEN;
 	*(int *)CMSG_DATA (cmptr) = fd;
 
-	if (sendmsg(sockfd, &msg, 0) != 1)
-		return -1;
+	for( ; ; ) {
+		if (sendmsg(sockfd, &msg, 0) != 1) {
+			if( EINTR == errno ) {
+				continue;
+			} else {
+				return -1;
+			}
+		} else {
+			break;
+		}
+	}
 
 	return 0;
 }
@@ -160,10 +178,15 @@ ssize_t SP_ProcPduUtils :: readn(int fd, void *vptr, size_t n)
 	ptr = (char*)vptr;
 	nleft = n;
 	while (nleft > 0) {
-		if ( (nread = read(fd, ptr, nleft)) < 0)
-			return(nread);		/* error, return < 0 */
-		else if (nread == 0)
+		if ( (nread = read(fd, ptr, nleft)) < 0) {
+			if( EINTR == errno ) {
+				continue;
+			}else {
+				return(nread);		/* error, return < 0 */
+			}
+		} else if (nread == 0) {
 			break;				/* EOF */
+		}
 
 		nleft -= nread;
 		ptr   += nread;
@@ -180,8 +203,13 @@ ssize_t SP_ProcPduUtils :: writen(int fd, const void *vptr, size_t n)
 	ptr = (char*)vptr;	/* can't do pointer arithmetic on void* */
 	nleft = n;
 	while (nleft > 0) {
-		if ( (nwritten = write(fd, ptr, nleft)) <= 0)
-			return(nwritten);		/* error */
+		if ( (nwritten = write(fd, ptr, nleft)) <= 0) {
+			if( EINTR == errno ) {
+				continue;
+			} else {
+				return(nwritten);		/* error */
+			}
+		}
 
 		nleft -= nwritten;
 		ptr   += nwritten;
