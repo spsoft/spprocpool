@@ -76,15 +76,11 @@ public:
 
 void sig_int(int signo)
 {
+	printf( "\nproc: %d\n", (int)getpid() );
+
 	SP_ProcPduUtils::print_cpu_time();
 
 	kill( 0, SIGUSR1 );
-}
-
-void sig_usr1( int signo )
-{
-	printf( "in %d, %d\n", getpid(), getppid() );
-	exit( 0 );
 }
 
 int main( int argc, char * argv[] )
@@ -127,7 +123,6 @@ int main( int argc, char * argv[] )
 	printf( "testproclfsvr listen on port [%d]\n", port );
 
 	signal( SIGINT, sig_int );
-	signal( SIGUSR1, sig_usr1 );
 
 	SP_ProcMTServer server( "", port, new SP_ProcUnpServiceFactory() );
 
@@ -139,7 +134,7 @@ int main( int argc, char * argv[] )
 	SP_ProcLock * lock = NULL;
 	if( 'f' == lockType || 'F' == lockType ) {
 		lock = new SP_ProcFileLock();
-		assert( 0 == ((SP_ProcFileLock*)lock)->init( "/tmp/testlfserver.lck" ) );
+		assert( 0 == ((SP_ProcFileLock*)lock)->init( "/tmp/testmtserver.lck" ) );
 	} else if( 't' == lockType || 'T' == lockType ) {
 		lock = new SP_ProcThreadLock();
 	} else {
