@@ -125,7 +125,7 @@ void SP_ProcWorkerMTAdapter :: process( SP_ProcInfo * procInfo )
 	threadPool->setFullCallback( reportFunc, procInfo );
 
 	for( ; ( 0 == mMaxRequestsPerProc )
-			|| ( mMaxRequestsPerProc > 0 && procInfo->getRequests() <= mMaxRequestsPerProc ); ) {
+			|| ( mMaxRequestsPerProc > 0 && procInfo->getRequests() < mMaxRequestsPerProc ); ) {
 
 		threadPool->wait4idler();
 

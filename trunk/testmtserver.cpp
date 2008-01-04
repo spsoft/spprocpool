@@ -68,7 +68,7 @@ public:
 	}
 
 	virtual void workerEnd( const SP_ProcInfo * procInfo ) {
-		printf( "pid %d, pipeFd %d, requests %d, lastActiveTime %ld\n",
+		printf( "pid %d exit, pipeFd %d, requests %d, lastActiveTime %ld\n",
 				(int)procInfo->getPid(), procInfo->getPipeFd(),
 				procInfo->getRequests(), procInfo->getLastActiveTime() );
 	}
@@ -130,6 +130,7 @@ int main( int argc, char * argv[] )
 	SP_ProcArgs_t args = { procCount, procCount, procCount };
 	server.setArgs( &args );
 	server.setThreadsPerProc( 10 );
+	server.setMaxRequestsPerProc( 1000 );
 
 	SP_ProcLock * lock = NULL;
 	if( 'f' == lockType || 'F' == lockType ) {
