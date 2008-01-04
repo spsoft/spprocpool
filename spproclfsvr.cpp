@@ -80,7 +80,7 @@ void SP_ProcWorkerLFAdapter :: process( SP_ProcInfo * procInfo )
 	assert( fcntl( mPodfd, F_SETFL, flags ) >= 0 );
 
 	for( ; ( 0 == mMaxRequestsPerProc )
-			|| ( mMaxRequestsPerProc > 0 && procInfo->getRequests() <= mMaxRequestsPerProc ); ) {
+			|| ( mMaxRequestsPerProc > 0 && procInfo->getRequests() < mMaxRequestsPerProc ); ) {
 
 		struct sockaddr_in clientAddr;
 		socklen_t clientLen = sizeof( clientAddr );
