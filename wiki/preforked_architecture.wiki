@@ -9,3 +9,12 @@ The preforked server architecture
 = Details =
 
 http://lh3.google.com/stephen.nil/R387OKgDxqI/AAAAAAAAAEE/qwdpTrNkYQo/%E7%BB%98%E5%9B%BE3.jpg?imgmax=512
+
+{{{
+MasterServer
+`-- ProcPool
+    `-- ProcManager
+        |-- ChildServer1
+        |-- ......
+        `-- ChildServerN
+}}}
