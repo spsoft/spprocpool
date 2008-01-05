@@ -20,6 +20,6 @@ MasterServer(ProcessPool)
                  `-- ChildServerN
 }}}
 
-# MasterServer fork to create ProcessManager, and ProcessPool is a stub of ProcessManager
-# These a ManagerPipe between ProcessPool and ProcessManager
-# When MasterServer need more ChildServer, it ask ProcessManager to create ChildServer via ProcessPool, ProcessManager is the only place to fork ChildServer
+  # MasterServer fork to create ProcessManager, and ProcessPool is a stub of ProcessManager
+  # These a ManagerPipe between ProcessPool and ProcessManager
+  # When MasterServer need more ChildServer, it ask ProcessManager to create ChildServer via ProcessPool, ProcessManager is the only place to fork ChildServer
