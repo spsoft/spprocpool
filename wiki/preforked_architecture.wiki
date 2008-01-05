@@ -1,4 +1,4 @@
-#The preforked server architecture
+The preforked server architecture
 
 = Introduction =
 
@@ -7,7 +7,4 @@ The preforked server architecture
 
 = Details =
 
-Add your content here.  Format your content with:
-  * Text in *bold* or _italic_
-  * Headings, paragraphs, and lists
-  * Automatic links to other wiki pages
+http://lh3.google.com/stephen.nil/R387OKgDxqI/AAAAAAAAAEE/qwdpTrNkYQo/%E7%BB%98%E5%9B%BE3.jpg?imgmax=512
