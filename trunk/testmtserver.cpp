@@ -18,7 +18,6 @@
 #include <netinet/tcp.h>
 
 #include "spprocmtsvr.hpp"
-#include "spprocinet.hpp"
 #include "spprocpdu.hpp"
 #include "spprocpool.hpp"
 #include "spproclock.hpp"

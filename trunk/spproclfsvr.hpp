@@ -6,7 +6,7 @@
 #ifndef __spproclfsvr_hpp__ 
 #define __spproclfsvr_hpp__
 
-#include "spprocinet.hpp"
+#include "spprocserver.hpp"
 
 class SP_ProcInetServiceFactory;
 class SP_ProcManager;

@@ -1,14 +1,11 @@
 /*
- * Copyright 2007 Stephen Liu
+ * Copyright 2010 Stephen Liu
  * For license terms, see the file COPYING along with this library.
  */
 
-#ifndef __spprocinet_hpp__
-#define __spprocinet_hpp__
+#ifndef __spprocserver_hpp__
+#define __spprocserver_hpp__
 
-class SP_ProcManager;
-class SP_ProcPool;
-class SP_ProcInfoList;
 class SP_ProcInfo;
 
 class SP_ProcInetService {
@@ -63,15 +60,6 @@ protected:
 	int mIsStop;
 	SP_ProcArgs_t * mArgs;
 	int mMaxRequestsPerProc;
-};
-
-class SP_ProcInetServer : public SP_ProcBaseServer {
-public:
-	SP_ProcInetServer( const char * bindIP, int port,
-			SP_ProcInetServiceFactory * factory );
-	virtual ~SP_ProcInetServer();
-
-	virtual int start();
 };
 
 #endif
