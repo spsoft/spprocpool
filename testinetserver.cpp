@@ -16,7 +16,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 
-#include "spprocinet.hpp"
+#include "spprocinetsvr.hpp"
 #include "spprocpdu.hpp"
 #include "spprocpool.hpp"
 

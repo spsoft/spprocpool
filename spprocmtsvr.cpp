@@ -17,7 +17,7 @@
 #include <netinet/in.h>
 
 #include "spprocmtsvr.hpp"
-#include "spprocinet.hpp"
+#include "spprocserver.hpp"
 #include "spprocmanager.hpp"
 #include "spprocpool.hpp"
 #include "spproclock.hpp"

@@ -24,8 +24,8 @@ endif
 
 #--------------------------------------------------------------------
 
-LIBOBJS = spprocpdu.o spproclock.o spprocmanager.o spprocpool.o \
-		spprocdatum.o spprocinet.o spproclfsvr.o spprocmtsvr.o \
+LIBOBJS = spprocpdu.o spproclock.o spprocmanager.o spprocpool.o spprocdatum.o \
+		spprocserver.o spprocinetsvr.o spproclfsvr.o spprocmtsvr.o \
 		spprocthread.o
 
 TARGET =  libspprocpool.so
